@@ -11,9 +11,10 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-function dayTypeFor(dateKey) {
+function dayTypeFor(dateKey, groups) {
   const days = Math.floor(new Date(dateKey + 'T00:00:00').getTime() / 86400000);
-  return days % 2 === 0 ? 'heavy' : 'light';
+  const idx = ((days % groups.length) + groups.length) % groups.length;
+  return groups[idx].key;
 }
 
 function blankData(ex) {
@@ -26,10 +27,15 @@ function blankData(ex) {
 
 function myExercisesGrouped(userData) {
   const catalogByKey = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
-  const grouped = { heavy: [], light: [] };
+  const groupKeys = userData.schedule.groups.map((g) => g.key);
+  const grouped = {};
+  groupKeys.forEach((k) => { grouped[k] = []; });
+  grouped.unassigned = [];
   userData.myExercises.forEach((entry) => {
     const def = catalogByKey[entry.key];
-    if (def && grouped[entry.category]) grouped[entry.category].push(def);
+    if (!def) return;
+    if (grouped[entry.category]) grouped[entry.category].push(def);
+    else grouped.unassigned.push(def);
   });
   return grouped;
 }
@@ -45,6 +51,32 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   res.json(CATALOG);
 });
 
+// ---------- Cronograma ----------
+app.get('/api/schedule', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  res.json(userData.schedule);
+});
+
+app.put('/api/schedule', requireAuth, (req, res) => {
+  const { labels } = req.body || {};
+  if (!Array.isArray(labels) || labels.length < 1 || labels.length > 5) {
+    return res.status(400).json({ error: 'informe de 1 a 5 grupos' });
+  }
+  const cleanLabels = labels.map((l) => String(l || '').trim()).filter(Boolean);
+  if (cleanLabels.length !== labels.length) {
+    return res.status(400).json({ error: 'todos os grupos precisam de um nome' });
+  }
+
+  const userData = getUserData(req.userId);
+  const oldGroups = userData.schedule.groups;
+  userData.schedule.groups = cleanLabels.map((label, i) => ({
+    key: oldGroups[i] ? oldGroups[i].key : `g${Date.now()}_${i}`,
+    label,
+  }));
+
+  persist().then(() => res.json(userData.schedule));
+});
+
 // ---------- Meus exercícios ----------
 app.get('/api/my-exercises', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
@@ -53,13 +85,14 @@ app.get('/api/my-exercises', requireAuth, (req, res) => {
 
 app.post('/api/my-exercises', requireAuth, (req, res) => {
   const { key, category } = req.body || {};
-  if (category !== 'heavy' && category !== 'light') {
-    return res.status(400).json({ error: 'category inválida' });
+  const userData = getUserData(req.userId);
+  const validKeys = userData.schedule.groups.map((g) => g.key);
+  if (!validKeys.includes(category)) {
+    return res.status(400).json({ error: 'grupo inválido' });
   }
   const def = CATALOG.find((c) => c.key === key);
   if (!def) return res.status(404).json({ error: 'exercício não encontrado no catálogo' });
 
-  const userData = getUserData(req.userId);
   const existing = userData.myExercises.find((m) => m.key === key);
   if (existing) existing.category = category;
   else userData.myExercises.push({ key, category });
@@ -69,10 +102,11 @@ app.post('/api/my-exercises', requireAuth, (req, res) => {
 
 app.patch('/api/my-exercises/:key', requireAuth, (req, res) => {
   const { category } = req.body || {};
-  if (category !== 'heavy' && category !== 'light') {
-    return res.status(400).json({ error: 'category inválida' });
-  }
   const userData = getUserData(req.userId);
+  const validKeys = userData.schedule.groups.map((g) => g.key);
+  if (!validKeys.includes(category)) {
+    return res.status(400).json({ error: 'grupo inválido' });
+  }
   const entry = userData.myExercises.find((m) => m.key === req.params.key);
   if (!entry) return res.status(404).json({ error: 'exercício não está no seu plano' });
   entry.category = category;
@@ -89,13 +123,17 @@ app.delete('/api/my-exercises/:key', requireAuth, (req, res) => {
 app.get('/api/day/:date', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
+  const groupKeys = userData.schedule.groups.map((g) => g.key);
   const dayEntry = userData.days[date];
-  const dayType = (dayEntry && dayEntry.dayType) || dayTypeFor(date);
+  const dayType =
+    dayEntry && dayEntry.dayType && groupKeys.includes(dayEntry.dayType)
+      ? dayEntry.dayType
+      : dayTypeFor(date, userData.schedule.groups);
   const present = !!(dayEntry && dayEntry.present);
 
   const grouped = myExercisesGrouped(userData);
   const exercises = {};
-  grouped[dayType].forEach((ex) => {
+  (grouped[dayType] || []).forEach((ex) => {
     const logKey = `${date}::${ex.key}`;
     const log = userData.exerciseLogs[logKey];
     if (log) {
@@ -113,7 +151,7 @@ app.post('/api/day/:date/presence', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
   const present = !!req.body.present;
-  const existing = userData.days[date] || { dayType: dayTypeFor(date) };
+  const existing = userData.days[date] || { dayType: dayTypeFor(date, userData.schedule.groups) };
   userData.days[date] = { ...existing, present };
   persist().then(() => res.json({ ok: true, date, present }));
 });
@@ -122,8 +160,9 @@ app.post('/api/day/:date/daytype', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
   const { dayType } = req.body;
-  if (dayType !== 'heavy' && dayType !== 'light') {
-    return res.status(400).json({ error: 'dayType inválido' });
+  const validKeys = userData.schedule.groups.map((g) => g.key);
+  if (!validKeys.includes(dayType)) {
+    return res.status(400).json({ error: 'grupo inválido' });
   }
   const existing = userData.days[date] || { present: false };
   userData.days[date] = { ...existing, dayType };
@@ -150,7 +189,7 @@ app.post('/api/day/:date/exercise/:key', requireAuth, (req, res) => {
   userData.defaults[key] = { data };
 
   if (!userData.days[date]) {
-    userData.days[date] = { dayType: dayTypeFor(date), present: false };
+    userData.days[date] = { dayType: dayTypeFor(date, userData.schedule.groups), present: false };
   }
 
   persist().then(() => res.json({ ok: true }));

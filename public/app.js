@@ -1,6 +1,8 @@
 // ---------- Estado ----------
 let currentUser = null;
-let EXERCISES = null; // { heavy: [...], light: [...] } — vem de /api/my-exercises
+let SCHEDULE = null; // { groups: [{key,label}] } — vem de /api/schedule
+let scheduleDraft = []; // rótulos em edição no painel de cronograma
+let EXERCISES = null; // { [groupKey]: [...], unassigned: [...] } — vem de /api/my-exercises
 let ALL_EXERCISES = [];
 let CATALOG = [];
 let currentDateKey = fmt(new Date());
@@ -45,6 +47,21 @@ async function apiDelete(url) {
   const r = await fetch(url, { method: 'DELETE' });
   if (!r.ok) throw new Error('DELETE ' + url + ' falhou');
   return r.json();
+}
+async function apiPut(url, body) {
+  const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('PUT ' + url + ' falhou');
+  return r.json();
+}
+
+// ---------- Cronograma: helpers ----------
+function groupIndex(key) {
+  const idx = SCHEDULE.groups.findIndex(g => g.key === key);
+  return idx >= 0 ? idx : 0;
+}
+function groupLabel(key) {
+  const g = SCHEDULE.groups.find(g => g.key === key);
+  return g ? g.label : key;
 }
 
 // ---------- Som ----------
@@ -178,26 +195,31 @@ async function logout() {
 async function bootApp() {
   CATALOG = await apiGet('/api/catalog');
   populateCatalogFilters();
+  await loadSchedule();
+  initScheduleDraft();
   await loadMyExercises();
   populateHistSelect();
   await loadSummary();
   await loadDay(currentDateKey);
 }
 
+async function loadSchedule() {
+  SCHEDULE = await apiGet('/api/schedule');
+}
+
 async function loadMyExercises() {
   EXERCISES = await apiGet('/api/my-exercises');
-  ALL_EXERCISES = [...EXERCISES.heavy, ...EXERCISES.light];
+  ALL_EXERCISES = Object.values(EXERCISES).flat();
 }
 
 // ---------- Render: cabeçalho do dia ----------
 function renderDay() {
   document.getElementById('dayDateLabel').textContent = labelPT(currentDay.date);
   const badge = document.getElementById('dayTypeBadge');
-  badge.textContent = currentDay.dayType === 'heavy' ? 'Dia pesado' : 'Dia leve';
-  badge.className = 'day-type-badge ' + currentDay.dayType;
+  badge.textContent = groupLabel(currentDay.dayType);
+  badge.className = 'day-type-badge grp' + groupIndex(currentDay.dayType);
 
-  document.getElementById('setHeavy').className = currentDay.dayType === 'heavy' ? 'sel-heavy' : '';
-  document.getElementById('setLight').className = currentDay.dayType === 'light' ? 'sel-light' : '';
+  renderDayTypeToggle();
 
   const pbtn = document.getElementById('presenceBtn');
   pbtn.textContent = currentDay.present ? '✓ Presença marcada' : 'Marcar presença de hoje';
@@ -206,6 +228,20 @@ function renderDay() {
   renderExercises();
   renderCalendar();
   renderStreak();
+}
+
+function renderDayTypeToggle() {
+  const wrap = document.getElementById('daytypeToggle');
+  wrap.innerHTML = '';
+  if (!SCHEDULE || SCHEDULE.groups.length <= 1) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  SCHEDULE.groups.forEach((g, i) => {
+    const btn = document.createElement('button');
+    btn.textContent = g.label;
+    btn.className = currentDay.dayType === g.key ? 'sel-grp' + i : '';
+    btn.onclick = () => setDayType(g.key);
+    wrap.appendChild(btn);
+  });
 }
 
 // ---------- Render: exercícios ----------
@@ -220,7 +256,7 @@ function renderExercises() {
   const list = EXERCISES[currentDay.dayType];
 
   if (!list || list.length === 0) {
-    container.innerHTML = `<div class="my-ex-empty">Você ainda não importou exercícios para dias "${currentDay.dayType === 'heavy' ? 'pesado' : 'leve'}". Vá na aba <strong>Meus Exercícios</strong> pra montar seu plano.</div>`;
+    container.innerHTML = `<div class="my-ex-empty">Você ainda não importou exercícios pro treino "${groupLabel(currentDay.dayType)}". Vá na aba <strong>Meus Exercícios</strong> pra montar seu plano.</div>`;
     return;
   }
 
@@ -425,7 +461,7 @@ function renderCalendar() {
     const cell = document.createElement('div');
     const info = byDate[dk];
     let cls = 'cal-cell';
-    if (info && info.present) cls += info.dayType === 'heavy' ? ' heavy-on' : ' light-on';
+    if (info && info.present) cls += ' grp' + groupIndex(info.dayType) + '-on';
     if (dk === today) cls += ' today';
     if (dk === currentDay.date) cls += ' selected';
     cell.className = cls;
@@ -465,8 +501,9 @@ function populateCatalogFilters() {
 
 function computeImportedMap() {
   const map = {};
-  (EXERCISES.heavy || []).forEach(ex => { map[ex.key] = 'heavy'; });
-  (EXERCISES.light || []).forEach(ex => { map[ex.key] = 'light'; });
+  SCHEDULE.groups.forEach(g => {
+    (EXERCISES[g.key] || []).forEach(ex => { map[ex.key] = g.key; });
+  });
   return map;
 }
 
@@ -510,52 +547,66 @@ function renderCatalog() {
     head.appendChild(nameCol);
     card.appendChild(head);
 
-    const actions = document.createElement('div');
-    actions.className = 'catalog-actions';
-    const current = importedMap[ex.key];
-
-    if (current) {
-      const badge = document.createElement('span');
-      badge.className = 'imported-badge ' + current;
-      badge.textContent = current === 'heavy' ? '✓ Importado · pesado' : '✓ Importado · leve';
-      actions.appendChild(badge);
-
-      const switchBtn = document.createElement('button');
-      switchBtn.className = 'catalog-btn-ghost';
-      switchBtn.textContent = current === 'heavy' ? 'Mover p/ leve' : 'Mover p/ pesado';
-      switchBtn.onclick = () => importExercise(ex.key, current === 'heavy' ? 'light' : 'heavy');
-      actions.appendChild(switchBtn);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'catalog-btn-ghost danger';
-      removeBtn.textContent = 'Remover';
-      removeBtn.onclick = () => removeExercise(ex.key);
-      actions.appendChild(removeBtn);
-    } else {
-      const heavyBtn = document.createElement('button');
-      heavyBtn.className = 'catalog-btn heavy';
-      heavyBtn.textContent = '+ Pesado';
-      heavyBtn.onclick = () => importExercise(ex.key, 'heavy');
-      const lightBtn = document.createElement('button');
-      lightBtn.className = 'catalog-btn light';
-      lightBtn.textContent = '+ Leve';
-      lightBtn.onclick = () => importExercise(ex.key, 'light');
-      actions.appendChild(heavyBtn);
-      actions.appendChild(lightBtn);
-    }
-    card.appendChild(actions);
+    card.appendChild(buildAddControl(ex, importedMap[ex.key]));
 
     container.appendChild(card);
   });
 }
 
-function renderMyExLists() {
-  const heavyEl = document.getElementById('myExHeavy');
-  const lightEl = document.getElementById('myExLight');
-  heavyEl.innerHTML = '';
-  lightEl.innerHTML = '';
+function buildAddControl(ex, current) {
+  const wrap = document.createElement('div');
+  wrap.className = 'catalog-actions';
 
-  function row(ex) {
+  if (current) {
+    const badge = document.createElement('span');
+    badge.className = 'imported-badge grp' + groupIndex(current);
+    badge.textContent = '✓ ' + groupLabel(current);
+    wrap.appendChild(badge);
+  }
+
+  if (SCHEDULE.groups.length > 1) {
+    const sel = document.createElement('select');
+    sel.className = 'catalog-group-select';
+    SCHEDULE.groups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.key;
+      opt.textContent = g.label;
+      if (g.key === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    wrap.appendChild(sel);
+
+    const btn = document.createElement('button');
+    btn.className = 'catalog-btn';
+    btn.textContent = current ? 'Mover' : '+ Adicionar';
+    btn.onclick = () => importExercise(ex.key, sel.value);
+    wrap.appendChild(btn);
+  } else {
+    const onlyKey = SCHEDULE.groups[0].key;
+    const btn = document.createElement('button');
+    btn.className = 'catalog-btn';
+    btn.textContent = current ? '✓ Importado' : '+ Adicionar';
+    btn.disabled = !!current;
+    btn.onclick = () => importExercise(ex.key, onlyKey);
+    wrap.appendChild(btn);
+  }
+
+  if (current) {
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'catalog-btn-ghost danger';
+    removeBtn.textContent = 'Remover';
+    removeBtn.onclick = () => removeExercise(ex.key);
+    wrap.appendChild(removeBtn);
+  }
+
+  return wrap;
+}
+
+function renderMyExLists() {
+  const container = document.getElementById('myExGroups');
+  container.innerHTML = '';
+
+  function row(ex, isUnassigned) {
     const r = document.createElement('div');
     r.className = 'my-ex-row';
     const info = document.createElement('div');
@@ -565,21 +616,110 @@ function renderMyExLists() {
     const name = document.createElement('div');
     name.className = 'my-ex-row-name';
     name.textContent = ex.name;
+    r.appendChild(info);
+    r.appendChild(name);
+
+    if (isUnassigned) {
+      const sel = document.createElement('select');
+      sel.className = 'catalog-group-select';
+      SCHEDULE.groups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.key;
+        opt.textContent = g.label;
+        sel.appendChild(opt);
+      });
+      const moveBtn = document.createElement('button');
+      moveBtn.className = 'catalog-btn';
+      moveBtn.textContent = 'Mover';
+      moveBtn.onclick = () => importExercise(ex.key, sel.value);
+      r.appendChild(sel);
+      r.appendChild(moveBtn);
+    }
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'catalog-btn-ghost danger';
     removeBtn.textContent = 'Remover';
     removeBtn.onclick = () => removeExercise(ex.key);
-    r.appendChild(info);
-    r.appendChild(name);
     r.appendChild(removeBtn);
     return r;
   }
 
-  if (!EXERCISES.heavy.length) heavyEl.innerHTML = '<div class="my-ex-empty">Nenhum exercício importado ainda.</div>';
-  else EXERCISES.heavy.forEach(ex => heavyEl.appendChild(row(ex)));
+  function block(title, colorClass, list, isUnassigned) {
+    const wrap = document.createElement('div');
+    wrap.className = 'my-ex-group';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'my-ex-group-title ' + colorClass;
+    titleEl.textContent = title;
+    wrap.appendChild(titleEl);
+    const listEl = document.createElement('div');
+    listEl.className = 'my-ex-list';
+    if (!list.length) listEl.innerHTML = '<div class="my-ex-empty">Nenhum exercício importado ainda.</div>';
+    else list.forEach(ex => listEl.appendChild(row(ex, isUnassigned)));
+    wrap.appendChild(listEl);
+    return wrap;
+  }
 
-  if (!EXERCISES.light.length) lightEl.innerHTML = '<div class="my-ex-empty">Nenhum exercício importado ainda.</div>';
-  else EXERCISES.light.forEach(ex => lightEl.appendChild(row(ex)));
+  SCHEDULE.groups.forEach((g, i) => {
+    container.appendChild(block(g.label, 'grp' + i, EXERCISES[g.key] || [], false));
+  });
+
+  if (EXERCISES.unassigned && EXERCISES.unassigned.length) {
+    container.appendChild(block('Sem grupo — reatribua', 'unassigned', EXERCISES.unassigned, true));
+  }
+}
+
+// ---------- Painel de cronograma ----------
+function initScheduleDraft() {
+  scheduleDraft = SCHEDULE.groups.map(g => g.label);
+  renderSchedulePanel();
+}
+
+function renderSchedulePanel() {
+  document.querySelectorAll('#schedulePresets button').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.count) === scheduleDraft.length);
+  });
+  const wrap = document.getElementById('scheduleLabels');
+  wrap.innerHTML = '';
+  if (scheduleDraft.length <= 1) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  scheduleDraft.forEach((label, i) => {
+    const inp = document.createElement('input');
+    inp.value = label;
+    inp.placeholder = `Nome do treino ${i + 1}`;
+    inp.oninput = () => { scheduleDraft[i] = inp.value; };
+    wrap.appendChild(inp);
+  });
+}
+
+function bindSchedulePanel() {
+  document.querySelectorAll('#schedulePresets button').forEach(btn => {
+    btn.onclick = () => {
+      const count = Number(btn.dataset.count);
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      const next = [];
+      for (let i = 0; i < count; i++) next.push(scheduleDraft[i] || letters[i]);
+      scheduleDraft = next;
+      renderSchedulePanel();
+    };
+  });
+
+  document.getElementById('scheduleSave').onclick = async () => {
+    const labels = scheduleDraft.map(l => l.trim()).filter(Boolean);
+    if (labels.length !== scheduleDraft.length) { flagSave('todos os grupos precisam de nome'); return; }
+    try {
+      SCHEDULE = await apiPut('/api/schedule', { labels });
+      initScheduleDraft();
+      await loadMyExercises();
+      renderCatalog();
+      renderMyExLists();
+      await loadDay(currentDateKey);
+      await loadSummary();
+      renderCalendar();
+      showToast('Cronograma atualizado');
+    } catch (e) {
+      flagSave('erro ao salvar cronograma');
+    }
+  };
 }
 
 async function importExercise(key, category) {
@@ -715,8 +855,6 @@ async function resetAll() {
 // ---------- Eventos estáticos ----------
 function bindStaticEvents() {
   document.getElementById('presenceBtn').onclick = togglePresence;
-  document.getElementById('setHeavy').onclick = () => setDayType('heavy');
-  document.getElementById('setLight').onclick = () => setDayType('light');
   document.getElementById('prevDay').onclick = () => loadDay(fmt(addDays(parseKey(currentDay.date), -1)));
   document.getElementById('nextDay').onclick = () => loadDay(fmt(addDays(parseKey(currentDay.date), 1)));
 
@@ -729,12 +867,14 @@ function bindStaticEvents() {
       document.getElementById('historico-view').hidden = btn.dataset.tab !== 'historico';
       if (btn.dataset.tab === 'historico') renderHistory();
       if (btn.dataset.tab === 'exercicios') { renderCatalog(); renderMyExLists(); }
+      if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); loadSummary().then(renderCalendar); }
     };
   });
 
   document.getElementById('catalogSearch').oninput = renderCatalog;
   document.getElementById('catalogMuscleFilter').onchange = renderCatalog;
   document.getElementById('catalogEquipFilter').onchange = renderCatalog;
+  bindSchedulePanel();
 
   document.getElementById('histSelect').onchange = renderHistory;
   document.getElementById('resetLink').onclick = resetAll;

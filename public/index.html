@@ -67,10 +67,7 @@
       <button id="nextDay" aria-label="Próximo dia">→</button>
     </div>
 
-    <div class="daytype-toggle">
-      <button id="setHeavy">Pesado</button>
-      <button id="setLight">Leve</button>
-    </div>
+    <div class="daytype-toggle" id="daytypeToggle"></div>
 
     <button class="presence-btn" id="presenceBtn">Marcar presença de hoje</button>
 
@@ -83,6 +80,19 @@
   </section>
 
   <section id="exercicios-view" hidden>
+
+    <div class="schedule-panel">
+      <div class="schedule-panel-title">Cronograma de treino</div>
+      <div class="schedule-presets" id="schedulePresets">
+        <button type="button" data-count="1">Único</button>
+        <button type="button" data-count="2">A / B</button>
+        <button type="button" data-count="3">A / B / C</button>
+        <button type="button" data-count="4">A / B / C / D</button>
+        <button type="button" data-count="5">A / B / C / D / E</button>
+      </div>
+      <div class="schedule-labels" id="scheduleLabels" hidden></div>
+      <button type="button" class="schedule-save" id="scheduleSave">Salvar cronograma</button>
+    </div>
 
     <div class="ex-filter-bar">
       <input type="text" id="catalogSearch" class="catalog-search" placeholder="Buscar exercício…">
@@ -98,14 +108,7 @@
     <div id="catalogList" class="catalog-list"></div>
 
     <div class="my-ex-header">Meus exercícios selecionados</div>
-    <div class="my-ex-group">
-      <div class="my-ex-group-title heavy">Dia pesado</div>
-      <div id="myExHeavy" class="my-ex-list"></div>
-    </div>
-    <div class="my-ex-group">
-      <div class="my-ex-group-title light">Dia leve</div>
-      <div id="myExLight" class="my-ex-list"></div>
-    </div>
+    <div id="myExGroups"></div>
 
   </section>
 

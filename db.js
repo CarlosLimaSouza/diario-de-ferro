@@ -17,7 +17,13 @@ function emptyDB() {
 }
 
 function emptyUserData() {
-  return { myExercises: [], days: {}, exerciseLogs: {}, defaults: {} };
+  return {
+    schedule: { groups: [{ key: 'g0', label: 'A' }, { key: 'g1', label: 'B' }] },
+    myExercises: [],
+    days: {},
+    exerciseLogs: {},
+    defaults: {},
+  };
 }
 
 function loadDB() {
