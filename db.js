@@ -13,7 +13,11 @@ function ensureDir() {
 }
 
 function emptyDB() {
-  return { days: {}, exerciseLogs: {}, defaults: {} };
+  return { users: {}, sessions: {}, userData: {} };
+}
+
+function emptyUserData() {
+  return { myExercises: [], days: {}, exerciseLogs: {}, defaults: {} };
 }
 
 function loadDB() {
@@ -27,9 +31,9 @@ function loadDB() {
     const raw = fs.readFileSync(DB_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
     return {
-      days: parsed.days || {},
-      exerciseLogs: parsed.exerciseLogs || {},
-      defaults: parsed.defaults || {},
+      users: parsed.users || {},
+      sessions: parsed.sessions || {},
+      userData: parsed.userData || {},
     };
   } catch (e) {
     console.error('Falha ao ler o banco de dados, iniciando um novo.', e);
@@ -56,11 +60,16 @@ function persist() {
   return writeQueue;
 }
 
-function resetDB() {
-  db.days = {};
-  db.exerciseLogs = {};
-  db.defaults = {};
+function getUserData(userId) {
+  if (!db.userData[userId]) {
+    db.userData[userId] = emptyUserData();
+  }
+  return db.userData[userId];
+}
+
+function resetUserData(userId) {
+  db.userData[userId] = emptyUserData();
   return persist();
 }
 
-module.exports = { db, persist, resetDB, DB_PATH };
+module.exports = { db, persist, getUserData, resetUserData, DB_PATH };

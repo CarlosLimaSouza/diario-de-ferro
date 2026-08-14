@@ -7,12 +7,40 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="app">
+
+<div class="auth-view" id="authView" hidden>
+  <div class="auth-card">
+    <div class="eyebrow">Diário de Ferro</div>
+    <h1 class="auth-title">Acesse sua conta</h1>
+    <div class="auth-tabs">
+      <button class="auth-tab-btn active" data-authtab="login" type="button">Entrar</button>
+      <button class="auth-tab-btn" data-authtab="signup" type="button">Criar conta</button>
+    </div>
+
+    <form id="loginForm" class="auth-form">
+      <input type="email" id="loginEmail" placeholder="E-mail" required autocomplete="email">
+      <input type="password" id="loginPassword" placeholder="Senha" required autocomplete="current-password">
+      <button type="submit" class="auth-submit">Entrar</button>
+    </form>
+
+    <form id="signupForm" class="auth-form" hidden>
+      <input type="text" id="signupName" placeholder="Nome (opcional)" autocomplete="name">
+      <input type="email" id="signupEmail" placeholder="E-mail" required autocomplete="email">
+      <input type="password" id="signupPassword" placeholder="Senha (mín. 6 caracteres)" required autocomplete="new-password">
+      <button type="submit" class="auth-submit">Criar conta</button>
+    </form>
+
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="app" id="appRoot" hidden>
 
   <header>
     <div>
       <div class="eyebrow">Registro pessoal de treino</div>
       <h1>Diário de Ferro</h1>
+      <div class="user-greeting" id="userGreeting"></div>
     </div>
     <div class="streak-block">
       <div>
@@ -24,6 +52,7 @@
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="hoje">Hoje</button>
+    <button class="tab-btn" data-tab="exercicios">Meus Exercícios</button>
     <button class="tab-btn" data-tab="historico">Histórico</button>
   </nav>
 
@@ -53,6 +82,33 @@
 
   </section>
 
+  <section id="exercicios-view" hidden>
+
+    <div class="ex-filter-bar">
+      <input type="text" id="catalogSearch" class="catalog-search" placeholder="Buscar exercício…">
+      <select id="catalogMuscleFilter" class="catalog-filter"></select>
+      <select id="catalogEquipFilter" class="catalog-filter"></select>
+    </div>
+
+    <div class="catalog-hint">
+      Dica: se a academia não tem um aparelho específico, é só não importar aquele exercício —
+      importe apenas os que você consegue executar.
+    </div>
+
+    <div id="catalogList" class="catalog-list"></div>
+
+    <div class="my-ex-header">Meus exercícios selecionados</div>
+    <div class="my-ex-group">
+      <div class="my-ex-group-title heavy">Dia pesado</div>
+      <div id="myExHeavy" class="my-ex-list"></div>
+    </div>
+    <div class="my-ex-group">
+      <div class="my-ex-group-title light">Dia leve</div>
+      <div id="myExLight" class="my-ex-list"></div>
+    </div>
+
+  </section>
+
   <section id="historico-view" hidden>
     <select class="hist-select" id="histSelect"></select>
     <div class="chart-wrap">
@@ -61,6 +117,7 @@
     <table class="hist-table" id="histTable"></table>
   </section>
 
+  <div class="reset-link" id="logoutLink">Sair da conta</div>
   <div class="reset-link" id="resetLink">Apagar todos os dados salvos</div>
 
 </div>

@@ -1,29 +1,15 @@
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const path = require('path');
-const { db, persist, resetDB } = require('./db');
+const { db, persist, getUserData, resetUserData } = require('./db');
+const { CATALOG } = require('./catalog');
+const { signup, login, logout, requireAuth, me } = require('./auth');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-
-const EXERCISES = {
-  heavy: [
-    { key: 'terra', name: 'Levantamento terra', type: 'weight', sets: 4, pose: 'hinge' },
-    { key: 'agacha_frontal', name: 'Agachamento frontal', type: 'weight', sets: 4, pose: 'squat' },
-    { key: 'militar', name: 'Desenvolvimento militar', type: 'weight', sets: 4, pose: 'press' },
-    { key: 'remada_curvada', name: 'Remada curvada', type: 'weight', sets: 4, pose: 'row' },
-    { key: 'prancha', name: 'Prancha', type: 'time', sets: 3, pose: 'plank' },
-  ],
-  light: [
-    { key: 'agacha_leve', name: 'Agachamento (leve)', type: 'weight', sets: 3, pose: 'squat' },
-    { key: 'rosca', name: 'Rosca direta', type: 'weight', sets: 3, pose: 'curl' },
-    { key: 'remada_leve', name: 'Remada (leve)', type: 'weight', sets: 3, pose: 'row' },
-    { key: 'panturrilha', name: 'Panturrilha com barra', type: 'weight', sets: 3, pose: 'calf' },
-    { key: 'bike', name: 'Bicicleta (intervalos)', type: 'bike', sets: 1, pose: 'bike' },
-    { key: 'prancha_lateral', name: 'Prancha lateral', type: 'time', sets: 3, note: 'cada lado', pose: 'sideplank' },
-  ],
-};
-const ALL_EXERCISES = [...EXERCISES.heavy, ...EXERCISES.light];
 
 function dayTypeFor(dateKey) {
   const days = Math.floor(new Date(dateKey + 'T00:00:00').getTime() / 86400000);
@@ -38,24 +24,84 @@ function blankData(ex) {
   return { sets: Array.from({ length: ex.sets }, () => ({ seconds: '', done: false })) };
 }
 
-app.get('/api/config', (req, res) => {
-  res.json({ exercises: EXERCISES });
+function myExercisesGrouped(userData) {
+  const catalogByKey = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
+  const grouped = { heavy: [], light: [] };
+  userData.myExercises.forEach((entry) => {
+    const def = catalogByKey[entry.key];
+    if (def && grouped[entry.category]) grouped[entry.category].push(def);
+  });
+  return grouped;
+}
+
+// ---------- Auth ----------
+app.post('/api/auth/signup', signup);
+app.post('/api/auth/login', login);
+app.post('/api/auth/logout', logout);
+app.get('/api/auth/me', requireAuth, me);
+
+// ---------- Catálogo ----------
+app.get('/api/catalog', requireAuth, (req, res) => {
+  res.json(CATALOG);
 });
 
-app.get('/api/day/:date', (req, res) => {
+// ---------- Meus exercícios ----------
+app.get('/api/my-exercises', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  res.json(myExercisesGrouped(userData));
+});
+
+app.post('/api/my-exercises', requireAuth, (req, res) => {
+  const { key, category } = req.body || {};
+  if (category !== 'heavy' && category !== 'light') {
+    return res.status(400).json({ error: 'category inválida' });
+  }
+  const def = CATALOG.find((c) => c.key === key);
+  if (!def) return res.status(404).json({ error: 'exercício não encontrado no catálogo' });
+
+  const userData = getUserData(req.userId);
+  const existing = userData.myExercises.find((m) => m.key === key);
+  if (existing) existing.category = category;
+  else userData.myExercises.push({ key, category });
+
+  persist().then(() => res.json({ ok: true, myExercises: myExercisesGrouped(userData) }));
+});
+
+app.patch('/api/my-exercises/:key', requireAuth, (req, res) => {
+  const { category } = req.body || {};
+  if (category !== 'heavy' && category !== 'light') {
+    return res.status(400).json({ error: 'category inválida' });
+  }
+  const userData = getUserData(req.userId);
+  const entry = userData.myExercises.find((m) => m.key === req.params.key);
+  if (!entry) return res.status(404).json({ error: 'exercício não está no seu plano' });
+  entry.category = category;
+  persist().then(() => res.json({ ok: true, myExercises: myExercisesGrouped(userData) }));
+});
+
+app.delete('/api/my-exercises/:key', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  userData.myExercises = userData.myExercises.filter((m) => m.key !== req.params.key);
+  persist().then(() => res.json({ ok: true, myExercises: myExercisesGrouped(userData) }));
+});
+
+// ---------- Dia ----------
+app.get('/api/day/:date', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
   const date = req.params.date;
-  const dayEntry = db.days[date];
+  const dayEntry = userData.days[date];
   const dayType = (dayEntry && dayEntry.dayType) || dayTypeFor(date);
   const present = !!(dayEntry && dayEntry.present);
 
+  const grouped = myExercisesGrouped(userData);
   const exercises = {};
-  EXERCISES[dayType].forEach((ex) => {
+  grouped[dayType].forEach((ex) => {
     const logKey = `${date}::${ex.key}`;
-    const log = db.exerciseLogs[logKey];
+    const log = userData.exerciseLogs[logKey];
     if (log) {
       exercises[ex.key] = { data: log.data, completed: !!log.completed };
     } else {
-      const def = db.defaults[ex.key];
+      const def = userData.defaults[ex.key];
       exercises[ex.key] = { data: def ? def.data : blankData(ex), completed: false };
     }
   });
@@ -63,51 +109,56 @@ app.get('/api/day/:date', (req, res) => {
   res.json({ date, dayType, present, exercises });
 });
 
-app.post('/api/day/:date/presence', (req, res) => {
+app.post('/api/day/:date/presence', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
   const date = req.params.date;
   const present = !!req.body.present;
-  const existing = db.days[date] || { dayType: dayTypeFor(date) };
-  db.days[date] = { ...existing, present };
+  const existing = userData.days[date] || { dayType: dayTypeFor(date) };
+  userData.days[date] = { ...existing, present };
   persist().then(() => res.json({ ok: true, date, present }));
 });
 
-app.post('/api/day/:date/daytype', (req, res) => {
+app.post('/api/day/:date/daytype', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
   const date = req.params.date;
   const { dayType } = req.body;
   if (dayType !== 'heavy' && dayType !== 'light') {
     return res.status(400).json({ error: 'dayType inválido' });
   }
-  const existing = db.days[date] || { present: false };
-  db.days[date] = { ...existing, dayType };
+  const existing = userData.days[date] || { present: false };
+  userData.days[date] = { ...existing, dayType };
   persist().then(() => res.json({ ok: true, date, dayType }));
 });
 
-app.post('/api/day/:date/exercise/:key', (req, res) => {
+app.post('/api/day/:date/exercise/:key', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
   const { date, key } = req.params;
-  const ex = ALL_EXERCISES.find((e) => e.key === key);
-  if (!ex) return res.status(404).json({ error: 'exercício não encontrado' });
+  const imported = userData.myExercises.find((m) => m.key === key);
+  const def = CATALOG.find((c) => c.key === key);
+  if (!imported || !def) return res.status(404).json({ error: 'exercício não encontrado no seu plano' });
 
   const { data, completed, value, detail } = req.body;
 
   const logKey = `${date}::${key}`;
-  db.exerciseLogs[logKey] = {
+  userData.exerciseLogs[logKey] = {
     data,
     completed: !!completed,
     value: typeof value === 'number' && !isNaN(value) ? value : null,
     detail: detail || '',
   };
   // Vira o novo padrão sugerido pra próxima vez que esse exercício aparecer.
-  db.defaults[key] = { data };
+  userData.defaults[key] = { data };
 
-  if (!db.days[date]) {
-    db.days[date] = { dayType: dayTypeFor(date), present: false };
+  if (!userData.days[date]) {
+    userData.days[date] = { dayType: dayTypeFor(date), present: false };
   }
 
   persist().then(() => res.json({ ok: true }));
 });
 
-app.get('/api/summary', (req, res) => {
-  const out = Object.entries(db.days).map(([date, v]) => ({
+app.get('/api/summary', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  const out = Object.entries(userData.days).map(([date, v]) => ({
     date,
     dayType: v.dayType,
     present: !!v.present,
@@ -116,10 +167,11 @@ app.get('/api/summary', (req, res) => {
   res.json(out);
 });
 
-app.get('/api/history/:key', (req, res) => {
+app.get('/api/history/:key', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
   const key = req.params.key;
   const suffix = `::${key}`;
-  const rows = Object.entries(db.exerciseLogs)
+  const rows = Object.entries(userData.exerciseLogs)
     .filter(([k]) => k.endsWith(suffix))
     .map(([k, v]) => ({ date: k.split('::')[0], value: v.value, detail: v.detail }))
     .filter((r) => r.value !== null && r.value !== undefined && !isNaN(r.value));
@@ -127,8 +179,8 @@ app.get('/api/history/:key', (req, res) => {
   res.json(rows.slice(-100));
 });
 
-app.delete('/api/reset', (req, res) => {
-  resetDB().then(() => res.json({ ok: true }));
+app.delete('/api/reset', requireAuth, (req, res) => {
+  resetUserData(req.userId).then(() => res.json({ ok: true }));
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
