@@ -19,6 +19,7 @@ const EQUIP_LABELS = {
   barra: 'Barra', halteres: 'Halteres', maquina: 'Máquina', cabo: 'Cabo/Polia',
   peso_corporal: 'Peso corporal', kettlebell: 'Kettlebell', cardio: 'Cardio',
 };
+const EQUIP_KEYS = Object.keys(EQUIP_LABELS);
 
 // ---------- Utilitários de data ----------
 function fmt(d) {
@@ -117,6 +118,7 @@ function flagSave(msg) {
 // ---------- Autenticação ----------
 async function init() {
   bindAuthEvents();
+  bindOnboardingEvents();
   bindStaticEvents();
   await checkAuth();
 }
@@ -187,11 +189,59 @@ async function submitAuth(url, body) {
     const data = await r.json();
     if (!r.ok) { errEl.textContent = data.error || 'Algo deu errado'; return; }
     currentUser = data;
-    showApp();
-    await bootApp();
+    if (url === '/api/auth/signup') {
+      showOnboarding();
+    } else {
+      showApp();
+      await bootApp();
+    }
   } catch (e) {
     errEl.textContent = 'Erro de conexão. Tente novamente.';
   }
+}
+
+// ---------- Onboarding (pós-cadastro) ----------
+function showOnboarding() {
+  document.getElementById('authView').hidden = true;
+  document.getElementById('appRoot').hidden = true;
+  document.getElementById('onboardingPreview').hidden = true;
+  document.getElementById('onboardingView').hidden = false;
+  buildEquipGrid(document.getElementById('onbEquipGrid'));
+}
+
+async function finishOnboarding() {
+  document.getElementById('onboardingView').hidden = true;
+  showApp();
+  await bootApp();
+}
+
+function bindOnboardingEvents() {
+  const refs = {
+    goal: document.getElementById('onbGoal'),
+    days: document.getElementById('onbDays'),
+    level: document.getElementById('onbLevel'),
+    sex: document.getElementById('onbSex'),
+    equipGrid: document.getElementById('onbEquipGrid'),
+  };
+  let lastPreview = null;
+
+  const doGenerate = async () => {
+    const groups = await generatePlanPreview(refs, document.getElementById('onboardingPreview'), document.getElementById('onboardingPreviewGroups'));
+    if (groups) lastPreview = groups;
+  };
+
+  document.getElementById('onboardingGenerateBtn').onclick = doGenerate;
+  document.getElementById('onboardingRegenBtn').onclick = doGenerate;
+
+  document.getElementById('onboardingApplyBtn').onclick = async () => {
+    await saveProfileFromRefs(refs);
+    if (lastPreview) await applyPlanPreview(lastPreview);
+    await finishOnboarding();
+  };
+
+  document.getElementById('onboardingSkipBtn').onclick = async () => {
+    await finishOnboarding();
+  };
 }
 
 async function logout() {
@@ -529,6 +579,126 @@ function renderStreak(pulse) {
   const el = document.getElementById('streakNum');
   el.textContent = streak;
   if (pulse) { el.classList.add('pulse'); setTimeout(() => el.classList.remove('pulse'), 150); }
+}
+
+// ---------- Questionário / gerador de plano (Simplificado + onboarding) ----------
+function buildEquipGrid(container) {
+  container.innerHTML = '';
+  EQUIP_KEYS.forEach(key => {
+    const label = document.createElement('label');
+    label.className = 'quiz-equip-item';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = key;
+    input.checked = true; // assume que a academia tem tudo; a pessoa desmarca o que não tem
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(' ' + EQUIP_LABELS[key]));
+    container.appendChild(label);
+  });
+}
+
+function readQuizAnswers(refs) {
+  const equipment = Array.from(refs.equipGrid.querySelectorAll('input:checked')).map(i => i.value);
+  return {
+    goal: refs.goal.value,
+    daysPerWeek: Number(refs.days.value),
+    level: refs.level.value,
+    sex: refs.sex.value || null,
+    equipment,
+  };
+}
+
+async function saveProfileFromRefs(refs) {
+  try { await apiPut('/api/profile', readQuizAnswers(refs)); } catch (e) { /* segue sem travar o onboarding */ }
+}
+
+async function generatePlanPreview(refs, previewEl, groupsListEl) {
+  const answers = readQuizAnswers(refs);
+  let result;
+  try {
+    result = await apiPost('/api/plan/generate', answers);
+  } catch (e) { flagSave('erro ao gerar sugestão'); return null; }
+  renderPlanPreviewGroups(result.groups, groupsListEl);
+  previewEl.hidden = false;
+  return result.groups;
+}
+
+function renderPlanPreviewGroups(groups, container) {
+  container.innerHTML = '';
+  groups.forEach((g, i) => {
+    const block = document.createElement('div');
+    block.className = 'quiz-preview-group';
+    const title = document.createElement('div');
+    title.className = 'my-ex-group-title grp' + i;
+    title.textContent = g.label;
+    block.appendChild(title);
+
+    if (!g.exercises.length) {
+      const empty = document.createElement('div');
+      empty.className = 'my-ex-empty';
+      empty.textContent = 'Nenhum exercício compatível com os equipamentos escolhidos.';
+      block.appendChild(empty);
+    } else {
+      g.exercises.forEach(ex => {
+        const row = document.createElement('div');
+        row.className = 'quiz-preview-ex-row';
+        row.textContent = ex.name;
+        block.appendChild(row);
+      });
+    }
+    container.appendChild(block);
+  });
+}
+
+async function applyPlanPreview(groups) {
+  const payload = { groups: groups.map(g => ({ label: g.label, exerciseKeys: g.exercises.map(ex => ex.key) })) };
+  try {
+    await apiPost('/api/plan/apply', payload);
+  } catch (e) { flagSave('erro ao aplicar plano'); return false; }
+  return true;
+}
+
+// ---------- Meus Exercícios: Avançado / Simplificado ----------
+function switchExMode(mode) {
+  document.querySelectorAll('.ex-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.exmode === mode));
+  document.getElementById('exAvancado').hidden = mode !== 'avancado';
+  document.getElementById('exSimplificado').hidden = mode !== 'simplificado';
+}
+
+function bindSimplificado() {
+  const refs = {
+    goal: document.getElementById('quizGoal'),
+    days: document.getElementById('quizDays'),
+    level: document.getElementById('quizLevel'),
+    sex: document.getElementById('quizSex'),
+    equipGrid: document.getElementById('quizEquipGrid'),
+  };
+  buildEquipGrid(refs.equipGrid);
+  let lastPreview = null;
+
+  const doGenerate = async () => {
+    const groups = await generatePlanPreview(refs, document.getElementById('quizPreview'), document.getElementById('quizPreviewGroups'));
+    if (groups) lastPreview = groups;
+  };
+
+  document.getElementById('quizGenerateBtn').onclick = doGenerate;
+  document.getElementById('quizRegenerateBtn').onclick = doGenerate;
+
+  document.getElementById('quizApplyBtn').onclick = async () => {
+    if (!lastPreview) return;
+    await saveProfileFromRefs(refs);
+    const ok = await applyPlanPreview(lastPreview);
+    if (!ok) return;
+    showToast('Plano aplicado!');
+    await loadSchedule();
+    initScheduleDraft();
+    await loadMyExercises();
+    renderCatalog();
+    renderMyExLists();
+    await loadDay(currentDateKey);
+    await loadSummary();
+    switchExMode('avancado');
+  };
 }
 
 // ---------- Meus Exercícios (catálogo + importação) ----------
@@ -911,6 +1081,11 @@ function bindStaticEvents() {
       if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); }
     };
   });
+
+  document.querySelectorAll('.ex-mode-btn').forEach(btn => {
+    btn.onclick = () => switchExMode(btn.dataset.exmode);
+  });
+  bindSimplificado();
 
   document.getElementById('catalogSearch').oninput = renderCatalog;
   document.getElementById('catalogMuscleFilter').onchange = renderCatalog;

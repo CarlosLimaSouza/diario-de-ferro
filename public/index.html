@@ -34,6 +34,76 @@
   </div>
 </div>
 
+<div class="onboarding-view" id="onboardingView" hidden>
+  <div class="onboarding-card">
+    <div class="eyebrow">Diário de Ferro</div>
+    <h1 class="auth-title">Vamos montar seu treino?</h1>
+    <p class="onboarding-lede">
+      Responda algumas perguntas rápidas e a gente sugere um cronograma pronto pra você ajustar.
+      Prefere montar do zero? Pule e vá direto pro modo Avançado, na aba Meus Exercícios.
+    </p>
+
+    <div class="quiz-panel">
+      <div class="quiz-field">
+        <label for="onbGoal">Objetivo</label>
+        <select id="onbGoal">
+          <option value="hipertrofia">Ganhar massa muscular</option>
+          <option value="emagrecimento">Emagrecimento</option>
+          <option value="forca">Força</option>
+          <option value="condicionamento">Condicionamento físico</option>
+          <option value="saude_geral">Saúde geral</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="onbDays">Dias de treino por semana</label>
+        <select id="onbDays">
+          <option value="1">1 dia</option>
+          <option value="2">2 dias</option>
+          <option value="3" selected>3 dias</option>
+          <option value="4">4 dias</option>
+          <option value="5">5 dias</option>
+          <option value="6">6 dias</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="onbLevel">Nível</label>
+        <select id="onbLevel">
+          <option value="iniciante">Iniciante</option>
+          <option value="intermediario" selected>Intermediário</option>
+          <option value="avancado">Avançado</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="onbSex">Sexo (opcional)</label>
+        <select id="onbSex">
+          <option value="">Prefiro não dizer</option>
+          <option value="M">Masculino</option>
+          <option value="F">Feminino</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label>Equipamentos disponíveis</label>
+        <div class="quiz-equip-grid" id="onbEquipGrid"></div>
+      </div>
+    </div>
+
+    <div class="onboarding-actions">
+      <button type="button" class="schedule-save" id="onboardingGenerateBtn">Gerar sugestão de treino</button>
+      <button type="button" class="catalog-btn-ghost" id="onboardingSkipBtn">Pular por enquanto</button>
+    </div>
+
+    <div id="onboardingPreview" hidden>
+      <div class="quiz-preview-title">Prévia do plano sugerido</div>
+      <div id="onboardingPreviewGroups"></div>
+      <div class="quiz-preview-actions">
+        <button type="button" class="schedule-save" id="onboardingApplyBtn">Usar este plano e começar</button>
+        <button type="button" class="catalog-btn-ghost" id="onboardingRegenBtn">Gerar outra sugestão</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="app" id="appRoot" hidden>
 
   <header>
@@ -79,34 +149,109 @@
 
   <section id="exercicios-view" hidden>
 
-    <div class="schedule-panel">
-      <div class="schedule-panel-title">Cronograma de treino</div>
-      <div class="schedule-presets" id="schedulePresets">
-        <button type="button" data-count="1">Único</button>
-        <button type="button" data-count="2">A / B</button>
-        <button type="button" data-count="3">A / B / C</button>
-        <button type="button" data-count="4">A / B / C / D</button>
-        <button type="button" data-count="5">A / B / C / D / E</button>
+    <div class="ex-mode-toggle">
+      <button type="button" class="ex-mode-btn active" data-exmode="avancado">Avançado</button>
+      <button type="button" class="ex-mode-btn" data-exmode="simplificado">Simplificado</button>
+    </div>
+
+    <div id="exAvancado">
+
+      <div class="schedule-panel">
+        <div class="schedule-panel-title">Cronograma de treino</div>
+        <div class="schedule-presets" id="schedulePresets">
+          <button type="button" data-count="1">Único</button>
+          <button type="button" data-count="2">A / B</button>
+          <button type="button" data-count="3">A / B / C</button>
+          <button type="button" data-count="4">A / B / C / D</button>
+          <button type="button" data-count="5">A / B / C / D / E</button>
+        </div>
+        <div class="schedule-labels" id="scheduleLabels" hidden></div>
+        <button type="button" class="schedule-save" id="scheduleSave">Salvar cronograma</button>
       </div>
-      <div class="schedule-labels" id="scheduleLabels" hidden></div>
-      <button type="button" class="schedule-save" id="scheduleSave">Salvar cronograma</button>
+
+      <div class="ex-filter-bar">
+        <input type="text" id="catalogSearch" class="catalog-search" placeholder="Buscar exercício…">
+        <select id="catalogMuscleFilter" class="catalog-filter"></select>
+        <select id="catalogEquipFilter" class="catalog-filter"></select>
+      </div>
+
+      <div class="catalog-hint">
+        Dica: se a academia não tem um aparelho específico, é só não importar aquele exercício —
+        importe apenas os que você consegue executar.
+      </div>
+
+      <div id="catalogList" class="catalog-list"></div>
+
+      <div class="my-ex-header">Meus exercícios selecionados</div>
+      <div id="myExGroups"></div>
+
     </div>
 
-    <div class="ex-filter-bar">
-      <input type="text" id="catalogSearch" class="catalog-search" placeholder="Buscar exercício…">
-      <select id="catalogMuscleFilter" class="catalog-filter"></select>
-      <select id="catalogEquipFilter" class="catalog-filter"></select>
+    <div id="exSimplificado" hidden>
+
+      <div class="quiz-panel">
+        <div class="quiz-field">
+          <label for="quizGoal">Objetivo</label>
+          <select id="quizGoal">
+            <option value="hipertrofia">Ganhar massa muscular</option>
+            <option value="emagrecimento">Emagrecimento</option>
+            <option value="forca">Força</option>
+            <option value="condicionamento">Condicionamento físico</option>
+            <option value="saude_geral">Saúde geral</option>
+          </select>
+        </div>
+        <div class="quiz-field">
+          <label for="quizDays">Dias de treino por semana</label>
+          <select id="quizDays">
+            <option value="1">1 dia</option>
+            <option value="2">2 dias</option>
+            <option value="3" selected>3 dias</option>
+            <option value="4">4 dias</option>
+            <option value="5">5 dias</option>
+            <option value="6">6 dias</option>
+          </select>
+        </div>
+        <div class="quiz-field">
+          <label for="quizLevel">Nível</label>
+          <select id="quizLevel">
+            <option value="iniciante">Iniciante</option>
+            <option value="intermediario" selected>Intermediário</option>
+            <option value="avancado">Avançado</option>
+          </select>
+        </div>
+        <div class="quiz-field">
+          <label for="quizSex">Sexo (opcional)</label>
+          <select id="quizSex">
+            <option value="">Prefiro não dizer</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div class="quiz-field">
+          <label>Equipamentos disponíveis</label>
+          <div class="quiz-equip-grid" id="quizEquipGrid"></div>
+        </div>
+      </div>
+
+      <div class="quiz-hint">
+        A sugestão é montada por regras sobre o catálogo de exercícios (não é IA) — dá pra gerar
+        de novo quantas vezes quiser antes de aplicar.
+      </div>
+
+      <button type="button" class="schedule-save" id="quizGenerateBtn">Gerar sugestão de treino</button>
+
+      <div id="quizPreview" hidden>
+        <div class="quiz-preview-title">Prévia do plano sugerido</div>
+        <div id="quizPreviewGroups"></div>
+        <div class="quiz-preview-actions">
+          <button type="button" class="schedule-save" id="quizApplyBtn">Usar este plano</button>
+          <button type="button" class="catalog-btn-ghost" id="quizRegenerateBtn">Gerar outra sugestão</button>
+        </div>
+        <div class="quiz-preview-warn">Isso substitui seu cronograma e exercícios atuais.</div>
+      </div>
+
     </div>
-
-    <div class="catalog-hint">
-      Dica: se a academia não tem um aparelho específico, é só não importar aquele exercício —
-      importe apenas os que você consegue executar.
-    </div>
-
-    <div id="catalogList" class="catalog-list"></div>
-
-    <div class="my-ex-header">Meus exercícios selecionados</div>
-    <div id="myExGroups"></div>
 
   </section>
 

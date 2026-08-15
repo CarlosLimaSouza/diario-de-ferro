@@ -163,4 +163,6 @@ const CATALOG = [
     description: 'Empurre com as pernas, incline o tronco levemente para trás e puxe a barra até o abdômen, num movimento contínuo e ritmado.' },
 ];
 
-module.exports = { CATALOG };
+const EQUIPMENT_KEYS = ['barra', 'halteres', 'maquina', 'cabo', 'peso_corporal', 'kettlebell', 'cardio'];
+
+module.exports = { CATALOG, EQUIPMENT_KEYS };
