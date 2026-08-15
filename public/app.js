@@ -493,8 +493,13 @@ async function saveExercise(ex, data) {
   const completed = computeCompleted(ex, data);
   const { value, detail } = computeValueDetail(ex, data);
   try {
-    await apiPost(`/api/day/${currentDay.date}/exercise/${ex.key}`, { data, completed, value, detail });
+    const res = await apiPost(`/api/day/${currentDay.date}/exercise/${ex.key}`, { data, completed, value, detail });
     flagSave('salvo');
+    if (res.isPR) {
+      playCelebration();
+      showToast(`🏆 Novo recorde em ${ex.name}!`);
+    }
+    celebrateUnlocks(res.gamification);
   } catch (e) {
     flagSave('erro ao salvar');
   }
@@ -510,9 +515,10 @@ async function toggleComplete() {
       await apiPost(`/api/day/${currentDay.date}/uncomplete`, {});
       showToast('Conclusão desfeita');
     } else {
-      await apiPost(`/api/day/${currentDay.date}/complete`, {});
+      const res = await apiPost(`/api/day/${currentDay.date}/complete`, {});
       playCelebration();
       showToast('🔥 Treino concluído!');
+      setTimeout(() => celebrateUnlocks(res.gamification), 900);
     }
   } catch (e) { flagSave('erro ao salvar'); return; }
   await loadSummary();
@@ -1157,7 +1163,11 @@ async function renderHistory() {
   });
 
   const polyline = pts.map(p => `${p.x},${p.y}`).join(' ');
-  const circles = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#C9A227"/>`).join('');
+  // Recordes pessoais ganham um anel maior, pra se destacar na linha.
+  const circles = pts.map(p => p.pt.isPR
+    ? `<circle cx="${p.x}" cy="${p.y}" r="6" fill="none" stroke="#C9A227" stroke-width="2"/><circle cx="${p.x}" cy="${p.y}" r="2.5" fill="#C9A227"/>`
+    : `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#C9A227"/>`
+  ).join('');
   // Ancora o rótulo à esquerda quando o último ponto está perto da borda
   // esquerda (ex: um único ponto) — senão o texto sai do viewBox.
   const lastLabel = pts.length ? (() => {
@@ -1169,7 +1179,7 @@ async function renderHistory() {
   svg.innerHTML = `<polyline points="${polyline}" fill="none" stroke="#C9A227" stroke-width="2"/>${circles}${lastLabel}`;
 
   table.innerHTML = `<tr><th>Data</th><th>Valor</th><th>Detalhe</th></tr>` +
-    hist.slice().reverse().slice(0, 15).map(pt => `<tr><td>${labelPT(pt.date)}</td><td>${pt.value}</td><td>${pt.detail || ''}</td></tr>`).join('');
+    hist.slice().reverse().slice(0, 15).map(pt => `<tr><td>${labelPT(pt.date)}</td><td>${pt.value}${pt.isPR ? ' 🏆' : ''}</td><td>${pt.detail || ''}</td></tr>`).join('');
 }
 
 // ---------- Perfil ----------
@@ -1194,6 +1204,8 @@ async function loadProfileTab() {
   renderProgressGallery(gallery);
 
   refreshPushButton();
+  loadGamification();
+  loadReminders();
 }
 
 function populateProfileForm(profile) {
@@ -1407,10 +1419,123 @@ function openPhotoLightbox(src, title) {
   document.getElementById('modalOverlay').hidden = false;
 }
 
+// ---------- Gamificação ----------
+async function loadGamification() {
+  let g;
+  try { g = await apiGet('/api/gamification'); } catch (e) { return; }
+  renderLevelCard(g);
+  renderAchievements(g.achievements);
+}
+
+function renderLevelCard(g) {
+  document.getElementById('levelCard').innerHTML = `
+    <div class="level-badge">${g.level}</div>
+    <div>
+      <div class="level-info-label">Nível</div>
+      <div class="level-info-points">${g.points} pontos</div>
+    </div>
+  `;
+}
+
+function renderAchievements(achievements) {
+  const grid = document.getElementById('achievementsGrid');
+  grid.innerHTML = '';
+  achievements.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'achievement-card' + (a.unlocked ? ' unlocked' : '');
+    card.innerHTML = `<div class="achievement-card-label">${a.unlocked ? '🏆 ' : '🔒 '}${a.label}</div><div class="achievement-card-desc">${a.description}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+function celebrateUnlocks(gam) {
+  if (!gam || !gam.newlyUnlocked || !gam.newlyUnlocked.length) return;
+  playCelebration();
+  gam.newlyUnlocked.forEach((a, i) => {
+    setTimeout(() => showToast(`🏆 Conquista: ${a.label}!`), i * 1200);
+  });
+}
+
+// ---------- Lembretes ----------
+const REMINDER_TYPE_LABELS = { treino: 'Treino', refeicao: 'Refeição', agua: 'Água' };
+const WEEKDAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+let reminderSelectedDays = new Set([0, 1, 2, 3, 4, 5, 6]);
+
+function buildReminderDaysGrid() {
+  const grid = document.getElementById('reminderDaysGrid');
+  grid.innerHTML = '';
+  WEEKDAY_LABELS.forEach((label, i) => {
+    const el = document.createElement('div');
+    el.className = 'reminder-day-item' + (reminderSelectedDays.has(i) ? ' selected' : '');
+    el.textContent = label;
+    el.onclick = () => {
+      if (reminderSelectedDays.has(i)) reminderSelectedDays.delete(i);
+      else reminderSelectedDays.add(i);
+      buildReminderDaysGrid();
+    };
+    grid.appendChild(el);
+  });
+}
+
+async function loadReminders() {
+  let list = [];
+  try { list = await apiGet('/api/reminders'); } catch (e) { list = []; }
+  renderRemindersList(list);
+}
+
+function renderRemindersList(list) {
+  const container = document.getElementById('remindersList');
+  container.innerHTML = '';
+  if (!list.length) {
+    container.innerHTML = '<div class="my-ex-empty">Nenhum lembrete configurado.</div>';
+    return;
+  }
+  list.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'reminder-row';
+    const info = document.createElement('div');
+    info.className = 'reminder-row-info';
+    const days = r.daysOfWeek.slice().sort().map(d => WEEKDAY_LABELS[d]).join(' ');
+    info.innerHTML = `${REMINDER_TYPE_LABELS[r.type] || r.type} — ${r.time}<div class="reminder-row-days">${days}</div>`;
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'reminder-toggle' + (r.enabled ? ' on' : '');
+    toggleBtn.textContent = r.enabled ? '✓ Ativo' : 'Pausado';
+    toggleBtn.onclick = async () => {
+      try {
+        await fetch(`/api/reminders/${r.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !r.enabled }) });
+        await loadReminders();
+      } catch (e) { flagSave('erro ao atualizar'); }
+    };
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'catalog-btn-ghost danger';
+    removeBtn.textContent = 'Remover';
+    removeBtn.onclick = async () => {
+      try { await apiDelete(`/api/reminders/${r.id}`); await loadReminders(); } catch (e) { flagSave('erro ao remover'); }
+    };
+    row.appendChild(info);
+    row.appendChild(toggleBtn);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  });
+}
+
+async function addReminder() {
+  const type = document.getElementById('reminderType').value;
+  const time = document.getElementById('reminderTime').value;
+  if (!time) { flagSave('informe um horário'); return; }
+  try {
+    await apiPost('/api/reminders', { type, time, daysOfWeek: Array.from(reminderSelectedDays) });
+    showToast('Lembrete adicionado');
+    await loadReminders();
+  } catch (e) { flagSave('erro ao adicionar lembrete'); }
+}
+
 function bindProfileEvents() {
   document.getElementById('profileSaveBtn').onclick = saveProfileTab;
   document.getElementById('metricSaveBtn').onclick = saveBodyMetric;
   document.getElementById('pushToggleBtn').onclick = togglePush;
+  document.getElementById('reminderAddBtn').onclick = addReminder;
+  buildReminderDaysGrid();
   bindProfilePhotoInput();
   bindProgressPhotoInput();
 }

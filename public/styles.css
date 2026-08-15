@@ -674,6 +674,55 @@ section[hidden]{display:none;}
 .meal-item .food-name{flex:1;}
 .meal-item .food-macro{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);}
 
+/* Gamificação */
+.level-card{
+  display:flex;align-items:center;gap:16px;
+  background:var(--surface);border:1px solid var(--brass-border);border-radius:var(--radius);
+  padding:16px;margin-bottom:14px;
+}
+.level-badge{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--brass-dim);border:2px solid var(--brass);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;color:var(--brass);
+}
+.level-info-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);text-transform:uppercase;}
+.level-info-points{font-family:'Oswald',sans-serif;font-size:18px;color:var(--text);}
+
+.achievements-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:20px;
+}
+.achievement-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 12px;opacity:0.4;
+}
+.achievement-card.unlocked{opacity:1;border-color:var(--brass-border);background:var(--brass-dim);}
+.achievement-card-label{font-family:'Oswald',sans-serif;font-size:12px;text-transform:uppercase;color:var(--text);margin-bottom:2px;}
+.achievement-card.unlocked .achievement-card-label{color:var(--brass);}
+.achievement-card-desc{font-family:'Inter',sans-serif;font-size:11px;color:var(--text-faint);}
+
+/* Lembretes */
+.reminder-days-grid{display:flex;gap:6px;flex-wrap:wrap;}
+.reminder-day-item{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.reminder-day-item.selected{background:var(--brass-dim);border-color:var(--brass-border);color:var(--brass);}
+.reminder-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 12px;margin-bottom:6px;
+}
+.reminder-row-info{flex:1;font-size:13px;}
+.reminder-row-days{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);}
+.reminder-toggle{
+  font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:var(--radius);
+  padding:5px 9px;cursor:pointer;border:1px solid var(--border);background:none;color:var(--text-dim);
+}
+.reminder-toggle.on{border-color:var(--light-border);color:var(--light);background:var(--light-dim);}
+
 .modal-meta{
   font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
   text-transform:uppercase;letter-spacing:0.04em;margin-top:-6px;

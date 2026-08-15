@@ -338,6 +338,34 @@
       <button type="button" class="schedule-save" id="profileSaveBtn">Salvar dados pessoais</button>
     </div>
 
+    <div class="profile-section-title">Nível e conquistas</div>
+    <div class="level-card" id="levelCard"></div>
+    <div class="achievements-grid" id="achievementsGrid"></div>
+
+    <div class="profile-section-title">Lembretes</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div>
+          <label for="reminderType">Tipo</label>
+          <select id="reminderType">
+            <option value="treino">Treino</option>
+            <option value="refeicao">Refeição</option>
+            <option value="agua">Água</option>
+          </select>
+        </div>
+        <div>
+          <label for="reminderTime">Horário</label>
+          <input type="time" id="reminderTime" value="08:00">
+        </div>
+      </div>
+      <div class="quiz-field">
+        <label>Dias da semana</label>
+        <div class="reminder-days-grid" id="reminderDaysGrid"></div>
+      </div>
+      <button type="button" class="catalog-btn" id="reminderAddBtn">Adicionar lembrete</button>
+    </div>
+    <div id="remindersList"></div>
+
     <div class="profile-section-title">Notificações</div>
     <div class="quiz-panel">
       <div class="quiz-hint" style="margin-bottom:10px;">

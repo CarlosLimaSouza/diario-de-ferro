@@ -10,6 +10,8 @@ const photos = require('./photos');
 const push = require('./push');
 const session = require('./session');
 const nutrition = require('./nutrition');
+const gamification = require('./gamification');
+const reminders = require('./reminders');
 
 const GOALS = ['emagrecimento', 'hipertrofia', 'forca', 'condicionamento', 'saude_geral'];
 const LEVELS = ['iniciante', 'intermediario', 'avancado'];
@@ -115,6 +117,7 @@ app.post('/api/body-metrics', requireAuth, (req, res) => {
 
   userData.bodyMetrics.push(entry);
   userData.bodyMetrics.sort((a, b) => a.date.localeCompare(b.date));
+  gamification.registerEvent(userData, 5, null);
   persist().then(() => res.json(entry));
 });
 
@@ -289,7 +292,8 @@ app.post('/api/day/:date/complete', requireAuth, (req, res) => {
   userData.scheduleState.pendingIndex =
     (userData.scheduleState.pendingIndex + 1) % userData.schedule.groups.length;
   userData.activeSession = { startedAt: null, restEndsAt: null };
-  persist().then(() => res.json({ ok: true }));
+  const gam = gamification.registerEvent(userData, 10, date);
+  persist().then(() => res.json({ ok: true, gamification: gam }));
 });
 
 app.post('/api/day/:date/uncomplete', requireAuth, (req, res) => {
@@ -340,18 +344,33 @@ app.post('/api/day/:date/exercise/:key', requireAuth, (req, res) => {
   if (!imported || !def) return res.status(404).json({ error: 'exercício não encontrado no seu plano' });
 
   const { data, completed, value, detail } = req.body;
+  const numericValue = typeof value === 'number' && !isNaN(value) ? value : null;
+
+  // Recorde pessoal: compara com o melhor valor já registrado desse
+  // exercício em qualquer outra data (exige pelo menos um registro anterior
+  // — o primeiro log de um exercício não conta como "recorde").
+  const suffix = `::${key}`;
+  let previousBest = null;
+  Object.entries(userData.exerciseLogs).forEach(([k, v]) => {
+    if (k.endsWith(suffix) && k !== `${date}::${key}` && typeof v.value === 'number') {
+      if (previousBest === null || v.value > previousBest) previousBest = v.value;
+    }
+  });
+  const isPR = numericValue !== null && previousBest !== null && numericValue > previousBest;
 
   const logKey = `${date}::${key}`;
   userData.exerciseLogs[logKey] = {
     data,
     completed: !!completed,
-    value: typeof value === 'number' && !isNaN(value) ? value : null,
+    value: numericValue,
     detail: detail || '',
+    isPR,
   };
   // Vira o novo padrão sugerido pra próxima vez que esse exercício aparecer.
   userData.defaults[key] = { data };
 
-  persist().then(() => res.json({ ok: true }));
+  const gam = isPR ? gamification.registerEvent(userData, 25, date) : null;
+  persist().then(() => res.json({ ok: true, isPR, gamification: gam }));
 });
 
 app.get('/api/summary', requireAuth, (req, res) => {
@@ -371,7 +390,7 @@ app.get('/api/history/:key', requireAuth, (req, res) => {
   const suffix = `::${key}`;
   const rows = Object.entries(userData.exerciseLogs)
     .filter(([k]) => k.endsWith(suffix))
-    .map(([k, v]) => ({ date: k.split('::')[0], value: v.value, detail: v.detail }))
+    .map(([k, v]) => ({ date: k.split('::')[0], value: v.value, detail: v.detail, isPR: !!v.isPR }))
     .filter((r) => r.value !== null && r.value !== undefined && !isNaN(r.value));
   rows.sort((a, b) => a.date.localeCompare(b.date));
   res.json(rows.slice(-100));
@@ -401,6 +420,15 @@ app.delete('/api/food-log/:date/:id', requireAuth, nutrition.deleteFoodLogEntry)
 app.get('/api/nutrition/targets', requireAuth, nutrition.getTargets);
 app.put('/api/nutrition/targets', requireAuth, nutrition.setTargets);
 
+// ---------- Gamificação ----------
+app.get('/api/gamification', requireAuth, gamification.getSummary);
+
+// ---------- Lembretes ----------
+app.get('/api/reminders', requireAuth, reminders.list);
+app.post('/api/reminders', requireAuth, reminders.create);
+app.patch('/api/reminders/:id', requireAuth, reminders.update);
+app.delete('/api/reminders/:id', requireAuth, reminders.remove);
+
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -415,6 +443,7 @@ app.use((err, req, res, next) => {
 });
 
 session.rearmScheduledPushes();
+reminders.startScheduler();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Diário de Ferro rodando na porta ${PORT}`));

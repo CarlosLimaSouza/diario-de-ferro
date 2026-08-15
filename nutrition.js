@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { TACO_FOODS } = require('./taco');
 const { getUserData, persist } = require('./db');
+const { registerEvent } = require('./gamification');
 
 const MEAL_TYPES = ['cafe', 'almoco', 'jantar', 'lanche'];
 
@@ -63,6 +64,7 @@ function addFoodLogEntry(req, res) {
   const entry = { id: crypto.randomUUID(), foodKey, grams: g, mealType, loggedAt: new Date().toISOString() };
   if (!userData.foodLog[date]) userData.foodLog[date] = [];
   userData.foodLog[date].push(entry);
+  registerEvent(userData, 5, null);
   persist().then(() => res.json(entry));
 }
 
