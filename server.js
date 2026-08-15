@@ -7,6 +7,8 @@ const { CATALOG, EQUIPMENT_KEYS } = require('./catalog');
 const { signup, login, logout, requireAuth, me } = require('./auth');
 const { generatePlan } = require('./plan');
 const photos = require('./photos');
+const push = require('./push');
+const session = require('./session');
 
 const GOALS = ['emagrecimento', 'hipertrofia', 'forca', 'condicionamento', 'saude_geral'];
 const LEVELS = ['iniciante', 'intermediario', 'avancado'];
@@ -278,9 +280,14 @@ app.post('/api/day/:date/complete', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
   const pendingGroup = userData.schedule.groups[userData.scheduleState.pendingIndex];
-  userData.days[date] = { status: 'trained', groupKey: pendingGroup.key };
+  const dayEntry = { status: 'trained', groupKey: pendingGroup.key };
+  if (userData.activeSession.startedAt) {
+    dayEntry.durationSec = Math.round((Date.now() - userData.activeSession.startedAt) / 1000);
+  }
+  userData.days[date] = dayEntry;
   userData.scheduleState.pendingIndex =
     (userData.scheduleState.pendingIndex + 1) % userData.schedule.groups.length;
+  userData.activeSession = { startedAt: null, restEndsAt: null };
   persist().then(() => res.json({ ok: true }));
 });
 
@@ -373,6 +380,17 @@ app.delete('/api/reset', requireAuth, (req, res) => {
   resetUserData(req.userId).then(() => res.json({ ok: true }));
 });
 
+// ---------- Sessão de treino / timer de descanso ----------
+app.get('/api/session/state', requireAuth, session.getState);
+app.post('/api/session/start', requireAuth, session.start);
+app.post('/api/session/cancel', requireAuth, session.cancel);
+app.post('/api/session/rest', requireAuth, session.rest);
+
+// ---------- Push (notificações em segundo plano) ----------
+app.get('/api/push/public-key', push.getPublicKey);
+app.post('/api/push/subscribe', requireAuth, push.subscribe);
+app.post('/api/push/unsubscribe', requireAuth, push.unsubscribe);
+
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -385,6 +403,8 @@ app.use((err, req, res, next) => {
   }
   next();
 });
+
+session.rearmScheduledPushes();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Diário de Ferro rodando na porta ${PORT}`));

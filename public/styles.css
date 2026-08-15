@@ -172,6 +172,37 @@ section[hidden]{display:none;}
 .rest-btn.on{border-color:var(--unassigned-border);color:var(--unassigned);background:var(--unassigned-dim);}
 .rest-btn[hidden]{display:none;}
 
+.session-start-btn{
+  width:100%;padding:12px;margin-bottom:16px;
+  font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.06em;font-size:14px;
+  border-radius:var(--radius);border:1px solid var(--light-border);
+  background:var(--light-dim);color:var(--light);cursor:pointer;
+}
+.session-start-btn:hover{background:var(--light);color:#0e1a16;}
+.session-start-btn[hidden]{display:none;}
+
+.session-widget{
+  text-align:center;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;margin-bottom:16px;
+}
+.session-widget[hidden]{display:none;}
+.session-widget-mode{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.12em;
+  color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;
+}
+.session-widget.resting .session-widget-mode{color:var(--brass);}
+.session-widget-clock{
+  font-family:'Oswald',sans-serif;font-size:40px;font-weight:700;color:var(--text);
+  font-variant-numeric:tabular-nums;line-height:1.1;
+}
+.session-widget.resting .session-widget-clock{color:var(--brass);}
+.session-cancel-link{
+  display:inline-block;margin-top:8px;background:none;border:none;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);
+  text-decoration:underline;cursor:pointer;
+}
+.session-cancel-link:hover{color:var(--heavy);}
+
 .calendar{
   display:grid;
   grid-template-columns:repeat(7,1fr);
@@ -403,6 +434,7 @@ section[hidden]{display:none;}
   font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:var(--radius);
   padding:6px 10px;cursor:pointer;border:1px solid var(--brass);background:var(--surface-2);color:var(--brass);
 }
+.catalog-btn.on{background:var(--light-dim);border-color:var(--light-border);color:var(--light);}
 .catalog-btn:hover{background:var(--brass);color:#181400;}
 .catalog-btn:disabled{opacity:0.5;cursor:default;background:var(--surface-2);color:var(--text-faint);border-color:var(--border);}
 .catalog-btn-ghost{

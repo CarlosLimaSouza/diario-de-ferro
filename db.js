@@ -37,6 +37,10 @@ function emptyUserData() {
     days: {},
     exerciseLogs: {},
     defaults: {},
+    activeSession: { startedAt: null, restEndsAt: null },
+    pushSubscriptions: [],
+    reminders: [],
+    gamification: { points: 0, achievements: [] },
   };
 }
 
@@ -108,6 +112,10 @@ function getUserData(userId) {
   }
   if (!Array.isArray(userData.bodyMetrics)) userData.bodyMetrics = [];
   if (!Array.isArray(userData.progressPhotos)) userData.progressPhotos = [];
+  if (!userData.activeSession) userData.activeSession = { startedAt: null, restEndsAt: null };
+  if (!Array.isArray(userData.pushSubscriptions)) userData.pushSubscriptions = [];
+  if (!Array.isArray(userData.reminders)) userData.reminders = [];
+  if (!userData.gamification) userData.gamification = { points: 0, achievements: [] };
   if (!Array.isArray(userData.myExercises)) userData.myExercises = [];
   if (!userData.days) userData.days = {};
   if (!userData.exerciseLogs) userData.exerciseLogs = {};

@@ -143,6 +143,13 @@
       <button class="rest-btn" id="restBtn">Marcar como folga</button>
     </div>
 
+    <button type="button" class="session-start-btn" id="startSessionBtn">▶ Começar treino</button>
+    <div class="session-widget" id="sessionWidget" hidden>
+      <div class="session-widget-mode" id="sessionWidgetMode">TREINANDO</div>
+      <div class="session-widget-clock" id="sessionWidgetClock">00:00</div>
+      <button type="button" class="session-cancel-link" id="cancelSessionBtn">Cancelar treino</button>
+    </div>
+
     <div id="exerciseList"></div>
     <div class="save-flag" id="saveFlag"></div>
 
@@ -328,6 +335,15 @@
         <div class="quiz-equip-grid" id="profEquipGrid"></div>
       </div>
       <button type="button" class="schedule-save" id="profileSaveBtn">Salvar dados pessoais</button>
+    </div>
+
+    <div class="profile-section-title">Notificações</div>
+    <div class="quiz-panel">
+      <div class="quiz-hint" style="margin-bottom:10px;">
+        Avisa quando o descanso entre séries termina — funciona mesmo com o site em
+        segundo plano ou fechado, se o navegador suportar.
+      </div>
+      <button type="button" class="catalog-btn" id="pushToggleBtn">Ativar notificações push</button>
     </div>
 
     <div class="profile-section-title">Foto de perfil</div>

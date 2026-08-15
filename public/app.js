@@ -5,10 +5,13 @@ let scheduleDraft = []; // rótulos em edição no painel de cronograma
 let EXERCISES = null; // { [groupKey]: [...], unassigned: [...] } — vem de /api/my-exercises
 let ALL_EXERCISES = [];
 let CATALOG = [];
+let vapidPublicKey = null; // pré-buscado no boot pra manter o handler de clique curto (subscribe() precisa de gesto do usuário "fresco")
 let currentDateKey = fmt(new Date());
 let currentDay = null; // { date, dayType, present, exercises }
 let summary = []; // [{date, dayType, present}]
 let audioCtx = null;
+let activeSession = null; // {startedAt, restEndsAt} — vem de /api/session/state
+let sessionTickHandle = null;
 
 const MUSCLE_LABELS = {
   peito: 'Peito', costas: 'Costas', pernas: 'Pernas', gluteos: 'Glúteos',
@@ -117,6 +120,10 @@ function flagSave(msg) {
 
 // ---------- Autenticação ----------
 async function init() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+  apiGet('/api/push/public-key').then(r => { vapidPublicKey = r.publicKey; }).catch(() => {});
   bindAuthEvents();
   bindOnboardingEvents();
   bindStaticEvents();
@@ -259,6 +266,7 @@ async function bootApp() {
   populateHistSelect();
   await loadSummary();
   await loadDay(currentDateKey);
+  await loadSessionState();
 }
 
 async function loadSchedule() {
@@ -380,6 +388,7 @@ function renderExercises() {
         playTick(checked);
         refreshStatus(status, ex, data);
         saveExercise(ex, data);
+        if (checked) triggerRestIfActive();
       });
       row.appendChild(check);
       const minInput = buildInput('number', 'Minutos', data.minutes, v => { data.minutes = v; });
@@ -398,6 +407,7 @@ function renderExercises() {
           playTick(checked);
           refreshStatus(status, ex, data);
           saveExercise(ex, data);
+          if (checked) triggerRestIfActive();
         });
         row.appendChild(check);
 
@@ -530,6 +540,148 @@ async function overrideDayType(groupKey) {
     await apiPost(`/api/day/${currentDay.date}/override`, { groupKey });
   } catch (e) { flagSave('erro ao salvar'); return; }
   await loadDay(currentDay.date);
+}
+
+// ---------- Sessão de treino / timer de descanso ----------
+async function loadSessionState() {
+  try { activeSession = await apiGet('/api/session/state'); } catch (e) { activeSession = { startedAt: null, restEndsAt: null }; }
+  renderSessionWidget();
+}
+
+function formatClock(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+}
+
+function renderSessionWidget() {
+  const startBtn = document.getElementById('startSessionBtn');
+  const widget = document.getElementById('sessionWidget');
+  clearInterval(sessionTickHandle);
+  if (!activeSession || !activeSession.startedAt) {
+    startBtn.hidden = false;
+    widget.hidden = true;
+    return;
+  }
+  startBtn.hidden = true;
+  widget.hidden = false;
+  tickSessionWidget();
+  sessionTickHandle = setInterval(tickSessionWidget, 1000);
+}
+
+function tickSessionWidget() {
+  if (!activeSession || !activeSession.startedAt) { clearInterval(sessionTickHandle); return; }
+  const widget = document.getElementById('sessionWidget');
+  const modeEl = document.getElementById('sessionWidgetMode');
+  const clockEl = document.getElementById('sessionWidgetClock');
+  const now = Date.now();
+  const resting = activeSession.restEndsAt && activeSession.restEndsAt > now;
+
+  if (resting) {
+    widget.classList.add('resting');
+    modeEl.textContent = 'DESCANSO';
+    clockEl.textContent = formatClock((activeSession.restEndsAt - now) / 1000);
+  } else {
+    if (activeSession.restEndsAt) {
+      activeSession.restEndsAt = null;
+      playCelebration();
+      showToast('⏱️ Descanso terminado!');
+    }
+    widget.classList.remove('resting');
+    modeEl.textContent = 'TREINANDO';
+    clockEl.textContent = formatClock((now - activeSession.startedAt) / 1000);
+  }
+}
+
+async function startSession() {
+  try {
+    activeSession = await apiPost('/api/session/start', {});
+    renderSessionWidget();
+    showToast('Treino iniciado! Bora.');
+  } catch (e) { flagSave('erro ao iniciar treino'); }
+}
+
+async function cancelSession() {
+  if (!confirm('Cancelar o treino em andamento? O tempo não vai ser salvo.')) return;
+  try { await apiPost('/api/session/cancel', {}); } catch (e) { /* segue e limpa localmente de qualquer forma */ }
+  activeSession = { startedAt: null, restEndsAt: null };
+  renderSessionWidget();
+}
+
+// Disparado quando uma série é marcada feita — só faz algo se houver treino
+// em andamento; não trava o registro do exercício em caso de erro.
+async function triggerRestIfActive() {
+  if (!activeSession || !activeSession.startedAt) return;
+  try {
+    activeSession = await apiPost('/api/session/rest', {});
+    renderSessionWidget();
+  } catch (e) { /* silencioso */ }
+}
+
+// ---------- Push (notificações em segundo plano) ----------
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function refreshPushButton() {
+  const btn = document.getElementById('pushToggleBtn');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    btn.textContent = 'Notificações não suportadas neste navegador';
+    btn.disabled = true;
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      btn.textContent = '✓ Notificações ativadas — toque pra desativar';
+      btn.classList.add('on');
+    } else {
+      btn.textContent = 'Ativar notificações push';
+      btn.classList.remove('on');
+    }
+  } catch (e) { /* service worker ainda não pronto */ }
+}
+
+async function togglePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const reg = await navigator.serviceWorker.ready;
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    try { await apiPost('/api/push/unsubscribe', { endpoint: existing.endpoint }); } catch (e) {}
+    await existing.unsubscribe();
+    showToast('Notificações desativadas');
+    refreshPushButton();
+    return;
+  }
+
+  // A cadeia depois daqui precisa ser curta: subscribe() só funciona com o
+  // gesto de clique ainda "fresco" — por isso a chave pública já vem
+  // pré-buscada no boot (vapidPublicKey) em vez de um fetch aqui no meio.
+  if (!vapidPublicKey) {
+    try { ({ publicKey: vapidPublicKey } = await apiGet('/api/push/public-key')); }
+    catch (e) { flagSave('erro ao ativar notificações'); return; }
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') { flagSave('permissão negada'); return; }
+  try {
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+    await apiPost('/api/push/subscribe', sub.toJSON());
+    showToast('Notificações ativadas!');
+  } catch (e) {
+    flagSave('erro ao ativar notificações');
+    return;
+  }
+  refreshPushButton();
 }
 
 // ---------- Calendário ----------
@@ -1040,6 +1192,8 @@ async function loadProfileTab() {
   let gallery = [];
   try { gallery = await apiGet('/api/progress-photos'); } catch (e) { gallery = []; }
   renderProgressGallery(gallery);
+
+  refreshPushButton();
 }
 
 function populateProfileForm(profile) {
@@ -1256,6 +1410,7 @@ function openPhotoLightbox(src, title) {
 function bindProfileEvents() {
   document.getElementById('profileSaveBtn').onclick = saveProfileTab;
   document.getElementById('metricSaveBtn').onclick = saveBodyMetric;
+  document.getElementById('pushToggleBtn').onclick = togglePush;
   bindProfilePhotoInput();
   bindProgressPhotoInput();
 }
@@ -1314,6 +1469,8 @@ async function resetAll() {
 function bindStaticEvents() {
   document.getElementById('completeBtn').onclick = toggleComplete;
   document.getElementById('restBtn').onclick = toggleRest;
+  document.getElementById('startSessionBtn').onclick = startSession;
+  document.getElementById('cancelSessionBtn').onclick = cancelSession;
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = () => {
@@ -1325,7 +1482,7 @@ function bindStaticEvents() {
       document.getElementById('perfil-view').hidden = btn.dataset.tab !== 'perfil';
       if (btn.dataset.tab === 'historico') { loadSummary().then(renderCalendar); renderHistory(); }
       if (btn.dataset.tab === 'exercicios') { renderCatalog(); renderMyExLists(); }
-      if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); }
+      if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); loadSessionState(); }
       if (btn.dataset.tab === 'perfil') { loadProfileTab(); }
     };
   });
