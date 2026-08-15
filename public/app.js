@@ -1006,12 +1006,258 @@ async function renderHistory() {
 
   const polyline = pts.map(p => `${p.x},${p.y}`).join(' ');
   const circles = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#C9A227"/>`).join('');
-  const lastLabel = pts.length ? `<text x="${pts[pts.length-1].x}" y="${pts[pts.length-1].y - 10}" text-anchor="end" fill="#EDEBE6" font-family="JetBrains Mono" font-size="11">${values[values.length-1]}</text>` : '';
+  // Ancora o rótulo à esquerda quando o último ponto está perto da borda
+  // esquerda (ex: um único ponto) — senão o texto sai do viewBox.
+  const lastLabel = pts.length ? (() => {
+    const p = pts[pts.length - 1];
+    const anchor = p.x < 60 ? 'start' : 'end';
+    return `<text x="${p.x}" y="${p.y - 10}" text-anchor="${anchor}" fill="#EDEBE6" font-family="JetBrains Mono" font-size="11">${values[values.length-1]}</text>`;
+  })() : '';
 
   svg.innerHTML = `<polyline points="${polyline}" fill="none" stroke="#C9A227" stroke-width="2"/>${circles}${lastLabel}`;
 
   table.innerHTML = `<tr><th>Data</th><th>Valor</th><th>Detalhe</th></tr>` +
     hist.slice().reverse().slice(0, 15).map(pt => `<tr><td>${labelPT(pt.date)}</td><td>${pt.value}</td><td>${pt.detail || ''}</td></tr>`).join('');
+}
+
+// ---------- Perfil ----------
+async function loadProfileTab() {
+  let profile;
+  try {
+    profile = await apiGet('/api/profile');
+  } catch (e) { flagSave('erro ao carregar perfil'); return; }
+  populateProfileForm(profile);
+  renderProfilePhotoPreview(profile);
+
+  document.getElementById('metricDate').value = fmt(new Date());
+  document.getElementById('progressDate').value = fmt(new Date());
+
+  let metrics = [];
+  try { metrics = await apiGet('/api/body-metrics'); } catch (e) { metrics = []; }
+  renderMetricsTable(metrics);
+  renderWeightChart(metrics);
+
+  let gallery = [];
+  try { gallery = await apiGet('/api/progress-photos'); } catch (e) { gallery = []; }
+  renderProgressGallery(gallery);
+}
+
+function populateProfileForm(profile) {
+  document.getElementById('profGoal').value = profile.goal || 'hipertrofia';
+  document.getElementById('profDays').value = String(profile.daysPerWeek || 3);
+  document.getElementById('profLevel').value = profile.level || 'intermediario';
+  document.getElementById('profSex').value = profile.sex || '';
+  document.getElementById('profBirthDate').value = profile.birthDate || '';
+  document.getElementById('profHeight').value = profile.heightCm || '';
+  document.getElementById('profRest').value = profile.restSeconds || 90;
+
+  const grid = document.getElementById('profEquipGrid');
+  buildEquipGrid(grid);
+  const equipSet = new Set(profile.equipment || []);
+  if (equipSet.size) {
+    grid.querySelectorAll('input[type="checkbox"]').forEach(inp => {
+      inp.checked = equipSet.has(inp.value);
+    });
+  }
+}
+
+function renderProfilePhotoPreview(profile) {
+  const img = document.getElementById('profilePhotoPreview');
+  const placeholder = document.getElementById('profilePhotoPlaceholder');
+  if (profile.profilePhoto) {
+    img.src = '/api/profile/photo?t=' + Date.now();
+    img.hidden = false;
+    placeholder.hidden = true;
+  } else {
+    img.hidden = true;
+    placeholder.hidden = false;
+  }
+}
+
+async function saveProfileTab() {
+  const grid = document.getElementById('profEquipGrid');
+  const equipment = Array.from(grid.querySelectorAll('input:checked')).map(i => i.value);
+  const payload = {
+    goal: document.getElementById('profGoal').value,
+    daysPerWeek: Number(document.getElementById('profDays').value),
+    level: document.getElementById('profLevel').value,
+    sex: document.getElementById('profSex').value || null,
+    birthDate: document.getElementById('profBirthDate').value || null,
+    heightCm: document.getElementById('profHeight').value || null,
+    restSeconds: document.getElementById('profRest').value || 90,
+    equipment,
+  };
+  try {
+    await apiPut('/api/profile', payload);
+    showToast('Dados salvos');
+  } catch (e) { flagSave('erro ao salvar'); }
+}
+
+async function uploadFile(url, file, extraFields) {
+  const form = new FormData();
+  form.append('photo', file);
+  if (extraFields) Object.entries(extraFields).forEach(([k, v]) => form.append(k, v));
+  const r = await fetch(url, { method: 'POST', body: form });
+  if (!r.ok) throw new Error('upload falhou');
+  return r.json();
+}
+
+function bindProfilePhotoInput() {
+  document.getElementById('profilePhotoInput').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      await uploadFile('/api/profile/photo', file);
+      const profile = await apiGet('/api/profile');
+      renderProfilePhotoPreview(profile);
+      showToast('Foto atualizada');
+    } catch (err) { flagSave('erro ao enviar foto'); }
+    e.target.value = '';
+  };
+}
+
+// ---------- Métricas corporais ----------
+function renderMetricsTable(metrics) {
+  const table = document.getElementById('metricsTable');
+  if (!metrics.length) { table.innerHTML = ''; return; }
+  table.innerHTML = `<tr><th>Data</th><th>Peso</th><th>% Gordura</th><th></th></tr>` +
+    metrics.slice().reverse().map(m => `
+      <tr>
+        <td>${labelPT(m.date)}</td>
+        <td>${m.weightKg !== null ? m.weightKg + ' kg' : '—'}</td>
+        <td>${m.bodyFatPct !== null ? m.bodyFatPct + '%' : '—'}</td>
+        <td><button type="button" class="catalog-btn-ghost danger" data-metric-id="${m.id}">Remover</button></td>
+      </tr>
+    `).join('');
+  table.querySelectorAll('[data-metric-id]').forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        await apiDelete(`/api/body-metrics/${btn.dataset.metricId}`);
+        const metrics2 = await apiGet('/api/body-metrics');
+        renderMetricsTable(metrics2);
+        renderWeightChart(metrics2);
+      } catch (e) { flagSave('erro ao remover'); }
+    };
+  });
+}
+
+function renderWeightChart(metrics) {
+  const svg = document.getElementById('weightChart');
+  const withWeight = metrics.filter(m => m.weightKg !== null);
+  if (!withWeight.length) {
+    svg.innerHTML = `<text x="300" y="90" text-anchor="middle" fill="#5F6567" font-family="JetBrains Mono" font-size="12">Registre seu peso pra ver o gráfico aqui</text>`;
+    return;
+  }
+  const values = withWeight.map(m => m.weightKg);
+  const min = Math.min(...values), max = Math.max(...values);
+  const pad = 24, w = 600, h = 180;
+  const range = (max - min) || 1;
+
+  const pts = withWeight.map((m, i) => {
+    const x = pad + (i * (w - 2 * pad) / Math.max(withWeight.length - 1, 1));
+    const y = h - pad - ((m.weightKg - min) / range) * (h - 2 * pad);
+    return { x, y };
+  });
+
+  const polyline = pts.map(p => `${p.x},${p.y}`).join(' ');
+  const circles = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#C9A227"/>`).join('');
+  const lastPt = pts[pts.length - 1];
+  const lastAnchor = lastPt.x < 60 ? 'start' : 'end';
+  const lastLabel = `<text x="${lastPt.x}" y="${lastPt.y - 10}" text-anchor="${lastAnchor}" fill="#EDEBE6" font-family="JetBrains Mono" font-size="11">${values[values.length-1]}kg</text>`;
+
+  svg.innerHTML = `<polyline points="${polyline}" fill="none" stroke="#C9A227" stroke-width="2"/>${circles}${lastLabel}`;
+}
+
+async function saveBodyMetric() {
+  const payload = {
+    date: document.getElementById('metricDate').value || fmt(new Date()),
+    weightKg: document.getElementById('metricWeight').value,
+    bodyFatPct: document.getElementById('metricBodyFat').value,
+    measurements: {
+      chest: document.getElementById('metricChest').value,
+      waist: document.getElementById('metricWaist').value,
+      hip: document.getElementById('metricHip').value,
+      arm: document.getElementById('metricArm').value,
+      thigh: document.getElementById('metricThigh').value,
+      calf: document.getElementById('metricCalf').value,
+    },
+  };
+  try {
+    await apiPost('/api/body-metrics', payload);
+    showToast('Métrica registrada');
+    const metrics = await apiGet('/api/body-metrics');
+    renderMetricsTable(metrics);
+    renderWeightChart(metrics);
+    ['metricWeight', 'metricBodyFat', 'metricChest', 'metricWaist', 'metricHip', 'metricArm', 'metricThigh', 'metricCalf'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+  } catch (e) { flagSave('erro ao salvar métrica'); }
+}
+
+// ---------- Fotos de progresso ----------
+function renderProgressGallery(list) {
+  const container = document.getElementById('progressGallery');
+  container.innerHTML = '';
+  if (!list.length) {
+    container.innerHTML = '<div class="my-ex-empty">Nenhuma foto de progresso ainda.</div>';
+    return;
+  }
+  list.slice().reverse().forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'progress-photo-card';
+    const img = document.createElement('img');
+    img.src = `/api/progress-photos/${p.id}/file`;
+    img.alt = p.note || p.date;
+    img.onclick = () => openPhotoLightbox(img.src, labelPT(p.date) + (p.note ? ' — ' + p.note : ''));
+    const dateEl = document.createElement('div');
+    dateEl.className = 'progress-photo-date';
+    dateEl.textContent = labelPT(p.date);
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'progress-photo-remove';
+    removeBtn.textContent = '×';
+    removeBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await apiDelete(`/api/progress-photos/${p.id}`);
+        const list2 = await apiGet('/api/progress-photos');
+        renderProgressGallery(list2);
+      } catch (err) { flagSave('erro ao remover'); }
+    };
+    card.appendChild(img);
+    card.appendChild(dateEl);
+    card.appendChild(removeBtn);
+    container.appendChild(card);
+  });
+}
+
+function bindProgressPhotoInput() {
+  document.getElementById('progressPhotoInput').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const date = document.getElementById('progressDate').value || fmt(new Date());
+    const note = document.getElementById('progressNote').value || '';
+    try {
+      await uploadFile('/api/progress-photos', file, { date, note });
+      showToast('Foto adicionada');
+      const list = await apiGet('/api/progress-photos');
+      renderProgressGallery(list);
+      document.getElementById('progressNote').value = '';
+    } catch (err) { flagSave('erro ao enviar foto'); }
+    e.target.value = '';
+  };
+}
+
+function openPhotoLightbox(src, title) {
+  document.getElementById('modalTitle').textContent = title || 'Foto';
+  document.getElementById('modalBody').innerHTML = `<img src="${src}" style="width:100%;border-radius:4px;">`;
+  document.getElementById('modalOverlay').hidden = false;
+}
+
+function bindProfileEvents() {
+  document.getElementById('profileSaveBtn').onclick = saveProfileTab;
+  document.getElementById('metricSaveBtn').onclick = saveBodyMetric;
+  bindProfilePhotoInput();
+  bindProgressPhotoInput();
 }
 
 // ---------- Modal de referência ----------
@@ -1076,9 +1322,11 @@ function bindStaticEvents() {
       document.getElementById('hoje-view').hidden = btn.dataset.tab !== 'hoje';
       document.getElementById('exercicios-view').hidden = btn.dataset.tab !== 'exercicios';
       document.getElementById('historico-view').hidden = btn.dataset.tab !== 'historico';
+      document.getElementById('perfil-view').hidden = btn.dataset.tab !== 'perfil';
       if (btn.dataset.tab === 'historico') { loadSummary().then(renderCalendar); renderHistory(); }
       if (btn.dataset.tab === 'exercicios') { renderCatalog(); renderMyExLists(); }
       if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); }
+      if (btn.dataset.tab === 'perfil') { loadProfileTab(); }
     };
   });
 
@@ -1086,6 +1334,7 @@ function bindStaticEvents() {
     btn.onclick = () => switchExMode(btn.dataset.exmode);
   });
   bindSimplificado();
+  bindProfileEvents();
 
   document.getElementById('catalogSearch').oninput = renderCatalog;
   document.getElementById('catalogMuscleFilter').onchange = renderCatalog;

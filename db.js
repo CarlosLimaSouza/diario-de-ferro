@@ -4,6 +4,9 @@ const path = require('path');
 // DB_PATH aponta pra um volume persistente no Railway (ex: /data/db.json).
 // Localmente, cai dentro de ./data/db.json.
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
+// Fotos ficam em disco, fora do JSON, no mesmo volume — o banco guarda só
+// o nome do arquivo/metadados, nunca o binário da imagem.
+const PHOTOS_DIR = process.env.PHOTOS_DIR || path.join(path.dirname(DB_PATH), 'photos');
 
 function ensureDir() {
   const dir = path.dirname(DB_PATH);
@@ -16,11 +19,20 @@ function emptyDB() {
   return { users: {}, sessions: {}, userData: {} };
 }
 
+function emptyProfile() {
+  return {
+    sex: null, goal: null, daysPerWeek: null, equipment: [], level: null, restSeconds: 90,
+    birthDate: null, heightCm: null, profilePhoto: null,
+  };
+}
+
 function emptyUserData() {
   return {
     schedule: { groups: [{ key: 'g0', label: 'A' }, { key: 'g1', label: 'B' }] },
     scheduleState: { pendingIndex: 0 },
-    profile: { sex: null, goal: null, daysPerWeek: null, equipment: [], level: null, restSeconds: 90 },
+    profile: emptyProfile(),
+    bodyMetrics: [],
+    progressPhotos: [],
     myExercises: [],
     days: {},
     exerciseLogs: {},
@@ -87,8 +99,15 @@ function getUserData(userId) {
     userData.scheduleState.pendingIndex = 0;
   }
   if (!userData.profile) {
-    userData.profile = { sex: null, goal: null, daysPerWeek: null, equipment: [], level: null, restSeconds: 90 };
+    userData.profile = emptyProfile();
+  } else {
+    const defaults = emptyProfile();
+    Object.keys(defaults).forEach((k) => {
+      if (userData.profile[k] === undefined) userData.profile[k] = defaults[k];
+    });
   }
+  if (!Array.isArray(userData.bodyMetrics)) userData.bodyMetrics = [];
+  if (!Array.isArray(userData.progressPhotos)) userData.progressPhotos = [];
   if (!Array.isArray(userData.myExercises)) userData.myExercises = [];
   if (!userData.days) userData.days = {};
   if (!userData.exerciseLogs) userData.exerciseLogs = {};
@@ -98,7 +117,9 @@ function getUserData(userId) {
 
 function resetUserData(userId) {
   db.userData[userId] = emptyUserData();
+  const userPhotosDir = path.join(PHOTOS_DIR, userId);
+  fs.rm(userPhotosDir, { recursive: true, force: true }, () => {});
   return persist();
 }
 
-module.exports = { db, persist, getUserData, resetUserData, DB_PATH };
+module.exports = { db, persist, getUserData, resetUserData, DB_PATH, PHOTOS_DIR };

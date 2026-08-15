@@ -124,6 +124,7 @@
     <button class="tab-btn active" data-tab="hoje">Hoje</button>
     <button class="tab-btn" data-tab="exercicios">Meus Exercícios</button>
     <button class="tab-btn" data-tab="historico">Histórico</button>
+    <button class="tab-btn" data-tab="perfil">Perfil</button>
   </nav>
 
   <section id="hoje-view">
@@ -264,6 +265,133 @@
       <svg id="histChart" viewBox="0 0 600 200" style="width:100%;height:auto;display:block;"></svg>
     </div>
     <table class="hist-table" id="histTable"></table>
+  </section>
+
+  <section id="perfil-view" hidden>
+
+    <div class="profile-section-title">Dados pessoais</div>
+    <div class="quiz-panel">
+      <div class="quiz-field">
+        <label for="profGoal">Objetivo</label>
+        <select id="profGoal">
+          <option value="hipertrofia">Ganhar massa muscular</option>
+          <option value="emagrecimento">Emagrecimento</option>
+          <option value="forca">Força</option>
+          <option value="condicionamento">Condicionamento físico</option>
+          <option value="saude_geral">Saúde geral</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="profDays">Dias de treino por semana</label>
+        <select id="profDays">
+          <option value="1">1 dia</option>
+          <option value="2">2 dias</option>
+          <option value="3">3 dias</option>
+          <option value="4">4 dias</option>
+          <option value="5">5 dias</option>
+          <option value="6">6 dias</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="profLevel">Nível</label>
+        <select id="profLevel">
+          <option value="iniciante">Iniciante</option>
+          <option value="intermediario">Intermediário</option>
+          <option value="avancado">Avançado</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="profSex">Sexo</label>
+        <select id="profSex">
+          <option value="">Prefiro não dizer</option>
+          <option value="M">Masculino</option>
+          <option value="F">Feminino</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+      <div class="quiz-field profile-field-row">
+        <div>
+          <label for="profBirthDate">Nascimento</label>
+          <input type="date" id="profBirthDate">
+        </div>
+        <div>
+          <label for="profHeight">Altura (cm)</label>
+          <input type="number" id="profHeight" placeholder="ex: 175">
+        </div>
+        <div>
+          <label for="profRest">Descanso padrão (seg)</label>
+          <input type="number" id="profRest" placeholder="90">
+        </div>
+      </div>
+      <div class="quiz-field">
+        <label>Equipamentos disponíveis</label>
+        <div class="quiz-equip-grid" id="profEquipGrid"></div>
+      </div>
+      <button type="button" class="schedule-save" id="profileSaveBtn">Salvar dados pessoais</button>
+    </div>
+
+    <div class="profile-section-title">Foto de perfil</div>
+    <div class="profile-photo-row">
+      <img class="profile-photo-preview" id="profilePhotoPreview" alt="Foto de perfil" hidden>
+      <div class="profile-photo-placeholder" id="profilePhotoPlaceholder">Sem foto</div>
+      <label class="catalog-btn profile-photo-upload-btn">
+        Enviar foto
+        <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png,image/webp" hidden>
+      </label>
+    </div>
+
+    <div class="profile-section-title">Métricas corporais</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div>
+          <label for="metricDate">Data</label>
+          <input type="date" id="metricDate">
+        </div>
+        <div>
+          <label for="metricWeight">Peso (kg)</label>
+          <input type="number" id="metricWeight" placeholder="ex: 78.5" step="0.1">
+        </div>
+        <div>
+          <label for="metricBodyFat">% Gordura</label>
+          <input type="number" id="metricBodyFat" placeholder="opcional" step="0.1">
+        </div>
+      </div>
+      <div class="quiz-field profile-measurements-grid">
+        <div><label for="metricChest">Peito (cm)</label><input type="number" id="metricChest"></div>
+        <div><label for="metricWaist">Cintura (cm)</label><input type="number" id="metricWaist"></div>
+        <div><label for="metricHip">Quadril (cm)</label><input type="number" id="metricHip"></div>
+        <div><label for="metricArm">Braço (cm)</label><input type="number" id="metricArm"></div>
+        <div><label for="metricThigh">Coxa (cm)</label><input type="number" id="metricThigh"></div>
+        <div><label for="metricCalf">Panturrilha (cm)</label><input type="number" id="metricCalf"></div>
+      </div>
+      <button type="button" class="schedule-save" id="metricSaveBtn">Registrar métrica</button>
+    </div>
+
+    <div class="chart-wrap">
+      <svg id="weightChart" viewBox="0 0 600 180" style="width:100%;height:auto;display:block;"></svg>
+    </div>
+    <table class="hist-table" id="metricsTable"></table>
+
+    <div class="profile-section-title">Fotos de progresso</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div>
+          <label for="progressDate">Data</label>
+          <input type="date" id="progressDate">
+        </div>
+        <div>
+          <label for="progressNote">Nota (opcional)</label>
+          <input type="text" id="progressNote" placeholder="ex: início do cutting">
+        </div>
+      </div>
+      <label class="catalog-btn profile-photo-upload-btn">
+        Enviar foto de progresso
+        <input type="file" id="progressPhotoInput" accept="image/jpeg,image/png,image/webp" hidden>
+      </label>
+    </div>
+
+    <div class="progress-gallery" id="progressGallery"></div>
+
   </section>
 
   <div class="reset-link" id="logoutLink">Sair da conta</div>

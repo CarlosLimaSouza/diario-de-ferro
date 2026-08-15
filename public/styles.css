@@ -81,16 +81,18 @@ h1{
   letter-spacing:0.08em;
 }
 
-.tabs{display:flex;gap:2px;margin-bottom:20px;}
+.tabs{display:flex;gap:2px;margin-bottom:20px;overflow-x:auto;}
 .tab-btn{
-  flex:1;
+  flex:0 0 auto;
+  min-width:108px;
   background:var(--surface);
   border:1px solid var(--border);
   color:var(--text-dim);
   font-family:'Oswald',sans-serif;
   text-transform:uppercase;
   letter-spacing:0.05em;
-  font-size:13px;
+  font-size:12px;
+  white-space:nowrap;
   padding:10px;
   cursor:pointer;
 }
@@ -537,6 +539,57 @@ section[hidden]{display:none;}
 .quiz-preview-warn{
   font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);
   text-align:center;margin-top:10px;
+}
+
+/* Perfil */
+.profile-section-title{
+  font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.04em;
+  font-size:14px;color:var(--text-dim);margin:24px 0 10px;
+}
+.profile-section-title:first-of-type{margin-top:0;}
+.quiz-field input[type="date"],
+.quiz-field input[type="number"],
+.quiz-field input[type="text"]{
+  width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  font-family:'Inter',sans-serif;font-size:13px;padding:9px 10px;border-radius:var(--radius);
+}
+.profile-field-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.profile-field-row label{margin-bottom:6px;}
+.profile-measurements-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.profile-measurements-grid label{margin-bottom:4px;}
+
+.profile-photo-row{
+  display:flex;align-items:center;gap:14px;margin-bottom:20px;
+}
+.profile-photo-preview{
+  width:84px;height:84px;border-radius:50%;object-fit:cover;
+  border:1px solid var(--border);
+}
+.profile-photo-placeholder{
+  width:84px;height:84px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);text-align:center;
+}
+.profile-photo-upload-btn{display:inline-block;}
+
+.progress-gallery{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:14px;
+}
+.progress-photo-card{
+  position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;
+  background:var(--surface);cursor:pointer;
+}
+.progress-photo-card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;}
+.progress-photo-date{
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text);
+  background:rgba(0,0,0,0.65);padding:3px 6px;
+}
+.progress-photo-remove{
+  position:absolute;top:4px;right:4px;
+  width:20px;height:20px;border-radius:50%;
+  background:rgba(0,0,0,0.65);color:var(--text);border:none;
+  font-size:13px;line-height:1;cursor:pointer;
 }
 
 .modal-meta{

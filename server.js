@@ -1,10 +1,12 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const crypto = require('crypto');
 const { db, persist, getUserData, resetUserData } = require('./db');
 const { CATALOG, EQUIPMENT_KEYS } = require('./catalog');
 const { signup, login, logout, requireAuth, me } = require('./auth');
 const { generatePlan } = require('./plan');
+const photos = require('./photos');
 
 const GOALS = ['emagrecimento', 'hipertrofia', 'forca', 'condicionamento', 'saude_geral'];
 const LEVELS = ['iniciante', 'intermediario', 'avancado'];
@@ -56,7 +58,7 @@ app.get('/api/profile', requireAuth, (req, res) => {
 });
 
 app.put('/api/profile', requireAuth, (req, res) => {
-  const { sex, goal, daysPerWeek, equipment, level } = req.body || {};
+  const { sex, goal, daysPerWeek, equipment, level, birthDate, heightCm, restSeconds } = req.body || {};
   const userData = getUserData(req.userId);
 
   if (sex !== undefined) userData.profile.sex = SEXES.includes(sex) ? sex : null;
@@ -71,9 +73,61 @@ app.put('/api/profile', requireAuth, (req, res) => {
       ? equipment.filter((e) => EQUIPMENT_KEYS.includes(e))
       : [];
   }
+  if (birthDate !== undefined) {
+    userData.profile.birthDate = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate : null;
+  }
+  if (heightCm !== undefined) {
+    const n = Number(heightCm);
+    userData.profile.heightCm = Number.isFinite(n) && n >= 100 && n <= 250 ? n : null;
+  }
+  if (restSeconds !== undefined) {
+    const n = Number(restSeconds);
+    userData.profile.restSeconds = Number.isFinite(n) && n >= 10 && n <= 600 ? n : 90;
+  }
 
   persist().then(() => res.json(userData.profile));
 });
+
+// ---------- Métricas corporais ----------
+app.get('/api/body-metrics', requireAuth, (req, res) => {
+  res.json(getUserData(req.userId).bodyMetrics);
+});
+
+app.post('/api/body-metrics', requireAuth, (req, res) => {
+  const { date, weightKg, bodyFatPct, measurements } = req.body || {};
+  const userData = getUserData(req.userId);
+
+  const entry = {
+    id: crypto.randomUUID(),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10),
+    weightKg: Number.isFinite(Number(weightKg)) && weightKg !== '' ? Number(weightKg) : null,
+    bodyFatPct: Number.isFinite(Number(bodyFatPct)) && bodyFatPct !== '' ? Number(bodyFatPct) : null,
+    measurements: {},
+  };
+  const measureKeys = ['chest', 'waist', 'hip', 'arm', 'thigh', 'calf'];
+  measureKeys.forEach((k) => {
+    const v = measurements && measurements[k];
+    entry.measurements[k] = Number.isFinite(Number(v)) && v !== '' ? Number(v) : null;
+  });
+
+  userData.bodyMetrics.push(entry);
+  userData.bodyMetrics.sort((a, b) => a.date.localeCompare(b.date));
+  persist().then(() => res.json(entry));
+});
+
+app.delete('/api/body-metrics/:id', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  userData.bodyMetrics = userData.bodyMetrics.filter((m) => m.id !== req.params.id);
+  persist().then(() => res.json({ ok: true }));
+});
+
+// ---------- Fotos (perfil + progresso) ----------
+app.post('/api/profile/photo', requireAuth, photos.upload.single('photo'), photos.uploadProfilePhoto);
+app.get('/api/profile/photo', requireAuth, photos.getProfilePhoto);
+app.post('/api/progress-photos', requireAuth, photos.upload.single('photo'), photos.uploadProgressPhoto);
+app.get('/api/progress-photos', requireAuth, photos.listProgressPhotos);
+app.get('/api/progress-photos/:id/file', requireAuth, photos.getProgressPhotoFile);
+app.delete('/api/progress-photos/:id', requireAuth, photos.deleteProgressPhoto);
 
 // ---------- Plano sugerido (modo Simplificado) ----------
 // Seleção baseada em regras sobre o catálogo existente — não é geração por IA.
@@ -322,6 +376,15 @@ app.delete('/api/reset', requireAuth, (req, res) => {
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// Erros de upload (multer: arquivo grande demais, tipo inválido) viram JSON
+// em vez da página de erro HTML padrão do Express.
+app.use((err, req, res, next) => {
+  if (err) {
+    return res.status(400).json({ error: err.message || 'requisição inválida' });
+  }
+  next();
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Diário de Ferro rodando na porta ${PORT}`));
