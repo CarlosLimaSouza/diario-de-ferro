@@ -122,12 +122,20 @@ async function init() {
 }
 
 async function checkAuth() {
+  let user;
   try {
-    currentUser = await apiGet('/api/auth/me');
-    showApp();
-    await bootApp();
+    user = await apiGet('/api/auth/me');
   } catch (e) {
     showAuth();
+    return;
+  }
+  currentUser = user;
+  showApp();
+  try {
+    await bootApp();
+  } catch (e) {
+    console.error(e);
+    showToast('Erro ao carregar seus dados. Tente recarregar a página.');
   }
 }
 
@@ -220,28 +228,52 @@ function renderDay() {
   badge.className = 'day-type-badge grp' + groupIndex(currentDay.dayType);
 
   renderDayTypeToggle();
-
-  const pbtn = document.getElementById('presenceBtn');
-  pbtn.textContent = currentDay.present ? '✓ Presença marcada' : 'Marcar presença de hoje';
-  pbtn.className = 'presence-btn' + (currentDay.present ? ' on' : '');
-
+  renderTodayActions();
   renderExercises();
   renderCalendar();
   renderStreak();
 }
 
+// Some botão de trocar treino quando hoje já foi concluído — não faz
+// sentido decidir de novo depois que o treino do dia já foi registrado.
 function renderDayTypeToggle() {
   const wrap = document.getElementById('daytypeToggle');
   wrap.innerHTML = '';
-  if (!SCHEDULE || SCHEDULE.groups.length <= 1) { wrap.hidden = true; return; }
+  const locked = currentDay.status === 'trained';
+  if (!SCHEDULE || SCHEDULE.groups.length <= 1 || locked) { wrap.hidden = true; return; }
   wrap.hidden = false;
   SCHEDULE.groups.forEach((g, i) => {
     const btn = document.createElement('button');
     btn.textContent = g.label;
     btn.className = currentDay.dayType === g.key ? 'sel-grp' + i : '';
-    btn.onclick = () => setDayType(g.key);
+    btn.onclick = () => overrideDayType(g.key);
     wrap.appendChild(btn);
   });
+}
+
+function renderTodayActions() {
+  const completeBtn = document.getElementById('completeBtn');
+  const restBtn = document.getElementById('restBtn');
+  const status = currentDay.status;
+
+  if (status === 'trained') {
+    completeBtn.textContent = '✓ Concluído — toque pra desfazer';
+    completeBtn.className = 'presence-btn on';
+    restBtn.hidden = true;
+    return;
+  }
+
+  completeBtn.textContent = 'Concluir treino de hoje';
+  completeBtn.className = 'presence-btn';
+  restBtn.hidden = false;
+
+  if (status === 'rest') {
+    restBtn.textContent = '✓ Folga — toque pra desfazer';
+    restBtn.className = 'rest-btn on';
+  } else {
+    restBtn.textContent = 'Marcar como folga';
+    restBtn.className = 'rest-btn';
+  }
 }
 
 // ---------- Render: exercícios ----------
@@ -408,42 +440,46 @@ async function saveExercise(ex, data) {
   }
 }
 
-// ---------- Presença ----------
-async function togglePresence() {
-  const newVal = !currentDay.present;
-  currentDay.present = newVal;
+// ---------- Concluir / folga / trocar treino ----------
+// Os dois botões funcionam como toggle: clicar de novo no estado marcado
+// desfaz a ação (evita ficar preso a um miss-click).
+async function toggleComplete() {
+  const isTrained = currentDay.status === 'trained';
   try {
-    await apiPost(`/api/day/${currentDay.date}/presence`, { present: newVal });
+    if (isTrained) {
+      await apiPost(`/api/day/${currentDay.date}/uncomplete`, {});
+      showToast('Conclusão desfeita');
+    } else {
+      await apiPost(`/api/day/${currentDay.date}/complete`, {});
+      playCelebration();
+      showToast('🔥 Treino concluído!');
+    }
   } catch (e) { flagSave('erro ao salvar'); return; }
-
-  const idx = summary.findIndex(s => s.date === currentDay.date);
-  if (idx >= 0) summary[idx].present = newVal;
-  else summary.push({ date: currentDay.date, dayType: currentDay.dayType, present: newVal });
-
-  const pbtn = document.getElementById('presenceBtn');
-  pbtn.textContent = newVal ? '✓ Presença marcada' : 'Marcar presença de hoje';
-  pbtn.className = 'presence-btn' + (newVal ? ' on' : '');
-
-  if (newVal) {
-    pbtn.classList.add('bump');
-    setTimeout(() => pbtn.classList.remove('bump'), 150);
-    playCelebration();
-    showToast('🔥 Presença registrada!');
-  }
-
-  renderCalendar();
-  renderStreak(true);
+  await loadSummary();
+  await loadDay(currentDay.date);
 }
 
-// ---------- Dia pesado/leve ----------
-async function setDayType(newType) {
-  if (currentDay.dayType === newType) return;
+async function toggleRest() {
+  const isRest = currentDay.status === 'rest';
   try {
-    await apiPost(`/api/day/${currentDay.date}/daytype`, { dayType: newType });
+    if (isRest) {
+      await apiPost(`/api/day/${currentDay.date}/unrest`, {});
+      showToast('Folga desmarcada');
+    } else {
+      await apiPost(`/api/day/${currentDay.date}/rest`, {});
+      showToast('Folga marcada');
+    }
+  } catch (e) { flagSave('erro ao salvar'); return; }
+  await loadSummary();
+  await loadDay(currentDay.date);
+}
+
+async function overrideDayType(groupKey) {
+  if (currentDay.dayType === groupKey) return;
+  try {
+    await apiPost(`/api/day/${currentDay.date}/override`, { groupKey });
   } catch (e) { flagSave('erro ao salvar'); return; }
   await loadDay(currentDay.date);
-  const idx = summary.findIndex(s => s.date === currentDay.date);
-  if (idx >= 0) summary[idx].dayType = newType;
 }
 
 // ---------- Calendário ----------
@@ -461,27 +497,33 @@ function renderCalendar() {
     const cell = document.createElement('div');
     const info = byDate[dk];
     let cls = 'cal-cell';
-    if (info && info.present) cls += ' grp' + groupIndex(info.dayType) + '-on';
+    if (info && info.status === 'trained') cls += ' grp' + groupIndex(info.groupKey) + '-on';
+    else if (info && info.status === 'rest') cls += ' rest-on';
     if (dk === today) cls += ' today';
     if (dk === currentDay.date) cls += ' selected';
     cell.className = cls;
     cell.title = dk;
-    cell.onclick = () => loadDay(dk);
+    cell.textContent = String(parseKey(dk).getDate());
     cal.appendChild(cell);
   });
 }
 
 // ---------- Streak ----------
+// Folga não quebra a sequência (é descanso planejado), mas também não soma
+// ao contador — só dias efetivamente treinados contam. Um dia em branco
+// (nem treino nem folga) quebra a sequência.
 function renderStreak(pulse) {
   const byDate = {};
   summary.forEach(s => { byDate[s.date] = s; });
   const today = fmt(new Date());
   let cursor = new Date();
-  if (!(byDate[today] && byDate[today].present)) cursor = addDays(cursor, -1);
+  if (!(byDate[today] && byDate[today].status === 'trained')) cursor = addDays(cursor, -1);
   let streak = 0;
   while (true) {
     const key = fmt(cursor);
-    if (byDate[key] && byDate[key].present) { streak++; cursor = addDays(cursor, -1); }
+    const info = byDate[key];
+    if (info && info.status === 'trained') { streak++; cursor = addDays(cursor, -1); }
+    else if (info && info.status === 'rest') { cursor = addDays(cursor, -1); }
     else break;
   }
   const el = document.getElementById('streakNum');
@@ -854,9 +896,8 @@ async function resetAll() {
 
 // ---------- Eventos estáticos ----------
 function bindStaticEvents() {
-  document.getElementById('presenceBtn').onclick = togglePresence;
-  document.getElementById('prevDay').onclick = () => loadDay(fmt(addDays(parseKey(currentDay.date), -1)));
-  document.getElementById('nextDay').onclick = () => loadDay(fmt(addDays(parseKey(currentDay.date), 1)));
+  document.getElementById('completeBtn').onclick = toggleComplete;
+  document.getElementById('restBtn').onclick = toggleRest;
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = () => {
@@ -865,9 +906,9 @@ function bindStaticEvents() {
       document.getElementById('hoje-view').hidden = btn.dataset.tab !== 'hoje';
       document.getElementById('exercicios-view').hidden = btn.dataset.tab !== 'exercicios';
       document.getElementById('historico-view').hidden = btn.dataset.tab !== 'historico';
-      if (btn.dataset.tab === 'historico') renderHistory();
+      if (btn.dataset.tab === 'historico') { loadSummary().then(renderCalendar); renderHistory(); }
       if (btn.dataset.tab === 'exercicios') { renderCatalog(); renderMyExLists(); }
-      if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); loadSummary().then(renderCalendar); }
+      if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); }
     };
   });
 

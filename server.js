@@ -11,12 +11,6 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-function dayTypeFor(dateKey, groups) {
-  const days = Math.floor(new Date(dateKey + 'T00:00:00').getTime() / 86400000);
-  const idx = ((days % groups.length) + groups.length) % groups.length;
-  return groups[idx].key;
-}
-
 function blankData(ex) {
   if (ex.type === 'bike') return { minutes: '', level: '', done: false };
   if (ex.type === 'weight') {
@@ -73,6 +67,9 @@ app.put('/api/schedule', requireAuth, (req, res) => {
     key: oldGroups[i] ? oldGroups[i].key : `g${Date.now()}_${i}`,
     label,
   }));
+  if (userData.scheduleState.pendingIndex >= userData.schedule.groups.length) {
+    userData.scheduleState.pendingIndex = 0;
+  }
 
   persist().then(() => res.json(userData.schedule));
 });
@@ -120,16 +117,22 @@ app.delete('/api/my-exercises/:key', requireAuth, (req, res) => {
 });
 
 // ---------- Dia ----------
+// O treino "de hoje" não é mais calculado por rotação de data: é sempre o
+// grupo pendente na fila (scheduleState.pendingIndex). A fila só anda quando
+// o treino é concluído (POST .../complete) — folga ou um dia em branco não
+// avançam. A data continua vindo do cliente (fmt(new Date()) local) só pra
+// indexar exerciseLogs/days corretamente no fuso do usuário.
 app.get('/api/day/:date', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
-  const groupKeys = userData.schedule.groups.map((g) => g.key);
   const dayEntry = userData.days[date];
-  const dayType =
-    dayEntry && dayEntry.dayType && groupKeys.includes(dayEntry.dayType)
-      ? dayEntry.dayType
-      : dayTypeFor(date, userData.schedule.groups);
-  const present = !!(dayEntry && dayEntry.present);
+  const pendingGroup = userData.schedule.groups[userData.scheduleState.pendingIndex];
+
+  const status = dayEntry ? dayEntry.status : null;
+  // Se hoje já foi concluído, mostra o grupo que foi treinado (visão
+  // congelada do dia) em vez do próximo pendente — senão pareceria que dá
+  // pra treinar dois grupos no mesmo dia.
+  const dayType = status === 'trained' ? dayEntry.groupKey : pendingGroup.key;
 
   const grouped = myExercisesGrouped(userData);
   const exercises = {};
@@ -144,29 +147,57 @@ app.get('/api/day/:date', requireAuth, (req, res) => {
     }
   });
 
-  res.json({ date, dayType, present, exercises });
+  res.json({ date, dayType, status, exercises });
 });
 
-app.post('/api/day/:date/presence', requireAuth, (req, res) => {
+app.post('/api/day/:date/complete', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
-  const present = !!req.body.present;
-  const existing = userData.days[date] || { dayType: dayTypeFor(date, userData.schedule.groups) };
-  userData.days[date] = { ...existing, present };
-  persist().then(() => res.json({ ok: true, date, present }));
+  const pendingGroup = userData.schedule.groups[userData.scheduleState.pendingIndex];
+  userData.days[date] = { status: 'trained', groupKey: pendingGroup.key };
+  userData.scheduleState.pendingIndex =
+    (userData.scheduleState.pendingIndex + 1) % userData.schedule.groups.length;
+  persist().then(() => res.json({ ok: true }));
 });
 
-app.post('/api/day/:date/daytype', requireAuth, (req, res) => {
+app.post('/api/day/:date/uncomplete', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const date = req.params.date;
-  const { dayType } = req.body;
-  const validKeys = userData.schedule.groups.map((g) => g.key);
-  if (!validKeys.includes(dayType)) {
-    return res.status(400).json({ error: 'grupo inválido' });
+  const dayEntry = userData.days[date];
+  if (!dayEntry || dayEntry.status !== 'trained') {
+    return res.status(400).json({ error: 'este dia não está marcado como concluído' });
   }
-  const existing = userData.days[date] || { present: false };
-  userData.days[date] = { ...existing, dayType };
-  persist().then(() => res.json({ ok: true, date, dayType }));
+  delete userData.days[date];
+  const len = userData.schedule.groups.length;
+  userData.scheduleState.pendingIndex = (userData.scheduleState.pendingIndex - 1 + len) % len;
+  persist().then(() => res.json({ ok: true }));
+});
+
+app.post('/api/day/:date/rest', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  const date = req.params.date;
+  userData.days[date] = { status: 'rest' };
+  persist().then(() => res.json({ ok: true }));
+});
+
+app.post('/api/day/:date/unrest', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  const date = req.params.date;
+  const dayEntry = userData.days[date];
+  if (!dayEntry || dayEntry.status !== 'rest') {
+    return res.status(400).json({ error: 'este dia não está marcado como folga' });
+  }
+  delete userData.days[date];
+  persist().then(() => res.json({ ok: true }));
+});
+
+app.post('/api/day/:date/override', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  const { groupKey } = req.body || {};
+  const idx = userData.schedule.groups.findIndex((g) => g.key === groupKey);
+  if (idx < 0) return res.status(400).json({ error: 'grupo inválido' });
+  userData.scheduleState.pendingIndex = idx;
+  persist().then(() => res.json({ ok: true }));
 });
 
 app.post('/api/day/:date/exercise/:key', requireAuth, (req, res) => {
@@ -188,10 +219,6 @@ app.post('/api/day/:date/exercise/:key', requireAuth, (req, res) => {
   // Vira o novo padrão sugerido pra próxima vez que esse exercício aparecer.
   userData.defaults[key] = { data };
 
-  if (!userData.days[date]) {
-    userData.days[date] = { dayType: dayTypeFor(date, userData.schedule.groups), present: false };
-  }
-
   persist().then(() => res.json({ ok: true }));
 });
 
@@ -199,8 +226,8 @@ app.get('/api/summary', requireAuth, (req, res) => {
   const userData = getUserData(req.userId);
   const out = Object.entries(userData.days).map(([date, v]) => ({
     date,
-    dayType: v.dayType,
-    present: !!v.present,
+    status: v.status,
+    groupKey: v.groupKey || null,
   }));
   out.sort((a, b) => a.date.localeCompare(b.date));
   res.json(out);

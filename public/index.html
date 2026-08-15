@@ -59,20 +59,18 @@
   <section id="hoje-view">
 
     <div class="day-nav">
-      <button id="prevDay" aria-label="Dia anterior">←</button>
       <div class="day-info">
         <div class="day-date" id="dayDateLabel">—</div>
         <div class="day-type-badge" id="dayTypeBadge">—</div>
       </div>
-      <button id="nextDay" aria-label="Próximo dia">→</button>
     </div>
 
     <div class="daytype-toggle" id="daytypeToggle"></div>
 
-    <button class="presence-btn" id="presenceBtn">Marcar presença de hoje</button>
-
-    <div class="calendar" id="calendar"></div>
-    <div class="cal-hint">Toque em um dia do calendário pra editar — inclusive dias passados</div>
+    <div class="today-actions">
+      <button class="presence-btn" id="completeBtn">Concluir treino de hoje</button>
+      <button class="rest-btn" id="restBtn">Marcar como folga</button>
+    </div>
 
     <div id="exerciseList"></div>
     <div class="save-flag" id="saveFlag"></div>
@@ -113,6 +111,9 @@
   </section>
 
   <section id="historico-view" hidden>
+    <div class="calendar" id="calendar"></div>
+    <div class="cal-hint">Cores por treino · cinza para folga</div>
+
     <select class="hist-select" id="histSelect"></select>
     <div class="chart-wrap">
       <svg id="histChart" viewBox="0 0 600 200" style="width:100%;height:auto;display:block;"></svg>

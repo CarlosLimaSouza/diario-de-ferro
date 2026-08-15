@@ -19,6 +19,8 @@ function emptyDB() {
 function emptyUserData() {
   return {
     schedule: { groups: [{ key: 'g0', label: 'A' }, { key: 'g1', label: 'B' }] },
+    scheduleState: { pendingIndex: 0 },
+    profile: { sex: null, goal: null, daysPerWeek: null, equipment: [], level: null, restSeconds: 90 },
     myExercises: [],
     days: {},
     exerciseLogs: {},
@@ -70,7 +72,28 @@ function getUserData(userId) {
   if (!db.userData[userId]) {
     db.userData[userId] = emptyUserData();
   }
-  return db.userData[userId];
+  const userData = db.userData[userId];
+  // Preenche campos que não existiam em contas criadas antes deles serem introduzidos.
+  if (!userData.schedule || !Array.isArray(userData.schedule.groups) || userData.schedule.groups.length === 0) {
+    userData.schedule = { groups: [{ key: 'g0', label: 'A' }, { key: 'g1', label: 'B' }] };
+  }
+  if (!userData.scheduleState || typeof userData.scheduleState.pendingIndex !== 'number') {
+    userData.scheduleState = { pendingIndex: 0 };
+  }
+  if (
+    userData.scheduleState.pendingIndex < 0 ||
+    userData.scheduleState.pendingIndex >= userData.schedule.groups.length
+  ) {
+    userData.scheduleState.pendingIndex = 0;
+  }
+  if (!userData.profile) {
+    userData.profile = { sex: null, goal: null, daysPerWeek: null, equipment: [], level: null, restSeconds: 90 };
+  }
+  if (!Array.isArray(userData.myExercises)) userData.myExercises = [];
+  if (!userData.days) userData.days = {};
+  if (!userData.exerciseLogs) userData.exerciseLogs = {};
+  if (!userData.defaults) userData.defaults = {};
+  return userData;
 }
 
 function resetUserData(userId) {
