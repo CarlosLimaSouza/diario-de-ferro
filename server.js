@@ -9,6 +9,7 @@ const { generatePlan } = require('./plan');
 const photos = require('./photos');
 const push = require('./push');
 const session = require('./session');
+const nutrition = require('./nutrition');
 
 const GOALS = ['emagrecimento', 'hipertrofia', 'forca', 'condicionamento', 'saude_geral'];
 const LEVELS = ['iniciante', 'intermediario', 'avancado'];
@@ -390,6 +391,15 @@ app.post('/api/session/rest', requireAuth, session.rest);
 app.get('/api/push/public-key', push.getPublicKey);
 app.post('/api/push/subscribe', requireAuth, push.subscribe);
 app.post('/api/push/unsubscribe', requireAuth, push.unsubscribe);
+
+// ---------- Diário alimentar ----------
+app.get('/api/foods/search', requireAuth, nutrition.searchFoods);
+app.post('/api/foods/custom', requireAuth, nutrition.createCustomFood);
+app.get('/api/food-log/:date', requireAuth, nutrition.getFoodLog);
+app.post('/api/food-log/:date', requireAuth, nutrition.addFoodLogEntry);
+app.delete('/api/food-log/:date/:id', requireAuth, nutrition.deleteFoodLogEntry);
+app.get('/api/nutrition/targets', requireAuth, nutrition.getTargets);
+app.put('/api/nutrition/targets', requireAuth, nutrition.setTargets);
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 

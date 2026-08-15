@@ -41,6 +41,9 @@ function emptyUserData() {
     pushSubscriptions: [],
     reminders: [],
     gamification: { points: 0, achievements: [] },
+    customFoods: [],
+    foodLog: {},
+    nutritionTargets: { kcal: null, proteinG: null, carbG: null, fatG: null },
   };
 }
 
@@ -116,6 +119,9 @@ function getUserData(userId) {
   if (!Array.isArray(userData.pushSubscriptions)) userData.pushSubscriptions = [];
   if (!Array.isArray(userData.reminders)) userData.reminders = [];
   if (!userData.gamification) userData.gamification = { points: 0, achievements: [] };
+  if (!Array.isArray(userData.customFoods)) userData.customFoods = [];
+  if (!userData.foodLog) userData.foodLog = {};
+  if (!userData.nutritionTargets) userData.nutritionTargets = { kcal: null, proteinG: null, carbG: null, fatG: null };
   if (!Array.isArray(userData.myExercises)) userData.myExercises = [];
   if (!userData.days) userData.days = {};
   if (!userData.exerciseLogs) userData.exerciseLogs = {};

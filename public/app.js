@@ -1415,6 +1415,234 @@ function bindProfileEvents() {
   bindProgressPhotoInput();
 }
 
+// ---------- Alimentação ----------
+const MEAL_LABELS = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar' };
+const MEAL_ORDER = ['cafe', 'almoco', 'lanche', 'jantar'];
+let foodSearchDebounce = null;
+
+function todayKey() { return fmt(new Date()); }
+
+async function loadNutritionTab() {
+  await Promise.all([loadNutritionTargets(), loadFoodLog()]);
+  document.getElementById('foodSearchResults').innerHTML = '';
+  document.getElementById('foodSearchInput').value = '';
+}
+
+async function loadNutritionTargets() {
+  let targets;
+  try { targets = await apiGet('/api/nutrition/targets'); } catch (e) { targets = { kcal: null, proteinG: null, carbG: null, fatG: null, source: 'insuficiente' }; }
+  document.getElementById('targetKcal').value = targets.kcal ?? '';
+  document.getElementById('targetProtein').value = targets.proteinG ?? '';
+  document.getElementById('targetCarb').value = targets.carbG ?? '';
+  document.getElementById('targetFat').value = targets.fatG ?? '';
+
+  const hint = document.getElementById('targetSourceHint');
+  if (targets.source === 'auto') hint.textContent = 'Calculada automaticamente (objetivo, dias/semana, peso, altura, idade).';
+  else if (targets.source === 'manual') hint.textContent = 'Meta definida manualmente.';
+  else hint.textContent = 'Preencha peso (Perfil → Métricas), altura e nascimento (Perfil → Dados pessoais) pra calcular automaticamente — ou defina uma meta manual aqui.';
+
+  renderNutritionState(targets);
+}
+
+let currentTargets = null;
+let currentFoodLog = [];
+
+function renderNutritionState(targets) {
+  if (targets) currentTargets = targets;
+  renderNutritionSummary(currentTargets, currentFoodLog);
+}
+
+async function loadFoodLog() {
+  try { currentFoodLog = await apiGet(`/api/food-log/${todayKey()}`); } catch (e) { currentFoodLog = []; }
+  renderFoodLogList(currentFoodLog);
+  renderNutritionSummary(currentTargets, currentFoodLog);
+}
+
+function sumMacro(entries, field) {
+  return entries.reduce((acc, e) => {
+    if (!e.food) return acc;
+    return acc + (e.food[field] || 0) * (e.grams / 100);
+  }, 0);
+}
+
+function renderNutritionSummary(targets, entries) {
+  const el = document.getElementById('nutritionSummary');
+  const kcalConsumed = Math.round(sumMacro(entries, 'kcal'));
+  const proteinConsumed = Math.round(sumMacro(entries, 'proteinG'));
+  const carbConsumed = Math.round(sumMacro(entries, 'carbG'));
+  const fatConsumed = Math.round(sumMacro(entries, 'fatG'));
+
+  const kcalTarget = targets && targets.kcal;
+  const pct = kcalTarget ? Math.min(100, Math.round((kcalConsumed / kcalTarget) * 100)) : 0;
+
+  function macroBlock(label, value, target, cls) {
+    const barPct = target ? Math.min(100, Math.round((value / target) * 100)) : 0;
+    return `
+      <div class="nutrition-macro">
+        <div class="nutrition-macro-label">${label}</div>
+        <div class="nutrition-macro-value">${value}g${target ? ' / ' + target + 'g' : ''}</div>
+        <div class="nutrition-macro-bar"><div class="nutrition-macro-bar-fill ${cls}" style="width:${barPct}%"></div></div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="nutrition-kcal-row">
+      <div><span class="nutrition-kcal-num">${kcalConsumed}</span> <span class="nutrition-kcal-label">kcal hoje</span></div>
+      <div class="nutrition-kcal-label">${kcalTarget ? 'meta ' + kcalTarget + ' kcal' : 'sem meta definida'}</div>
+    </div>
+    <div class="nutrition-bar-track"><div class="nutrition-bar-fill" style="width:${pct}%"></div></div>
+    <div class="nutrition-macros">
+      ${macroBlock('Proteína', proteinConsumed, targets && targets.proteinG, 'protein')}
+      ${macroBlock('Carbo', carbConsumed, targets && targets.carbG, 'carb')}
+      ${macroBlock('Gordura', fatConsumed, targets && targets.fatG, 'fat')}
+    </div>
+  `;
+}
+
+function renderFoodLogList(entries) {
+  const container = document.getElementById('foodLogList');
+  container.innerHTML = '';
+  if (!entries.length) {
+    container.innerHTML = '<div class="my-ex-empty">Nenhum alimento registrado hoje ainda.</div>';
+    return;
+  }
+  MEAL_ORDER.forEach(mealType => {
+    const items = entries.filter(e => e.mealType === mealType);
+    if (!items.length) return;
+    const group = document.createElement('div');
+    group.className = 'meal-group';
+    const title = document.createElement('div');
+    title.className = 'meal-group-title';
+    title.textContent = MEAL_LABELS[mealType];
+    group.appendChild(title);
+    items.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'meal-item';
+      const name = document.createElement('div');
+      name.className = 'food-name';
+      const kcal = e.food ? Math.round(e.food.kcal * e.grams / 100) : 0;
+      name.textContent = `${e.food ? e.food.name : '(alimento removido)'} — ${e.grams}g`;
+      const macro = document.createElement('div');
+      macro.className = 'food-macro';
+      macro.textContent = `${kcal} kcal`;
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'catalog-btn-ghost danger';
+      removeBtn.textContent = 'Remover';
+      removeBtn.onclick = async () => {
+        try {
+          await apiDelete(`/api/food-log/${todayKey()}/${e.id}`);
+          await loadFoodLog();
+        } catch (err) { flagSave('erro ao remover'); }
+      };
+      row.appendChild(name);
+      row.appendChild(macro);
+      row.appendChild(removeBtn);
+      group.appendChild(row);
+    });
+    container.appendChild(group);
+  });
+}
+
+function bindFoodSearch() {
+  document.getElementById('foodSearchInput').oninput = (e) => {
+    clearTimeout(foodSearchDebounce);
+    const q = e.target.value.trim();
+    foodSearchDebounce = setTimeout(() => runFoodSearch(q), 250);
+  };
+}
+
+async function runFoodSearch(q) {
+  const container = document.getElementById('foodSearchResults');
+  if (!q) { container.innerHTML = ''; return; }
+  let results = [];
+  try { results = await apiGet('/api/foods/search?q=' + encodeURIComponent(q)); } catch (e) { results = []; }
+  container.innerHTML = '';
+  if (!results.length) {
+    container.innerHTML = '<div class="my-ex-empty">Nada encontrado — cadastre como "meu alimento" abaixo.</div>';
+    return;
+  }
+  results.forEach(food => {
+    const row = document.createElement('div');
+    row.className = 'food-search-item';
+    const name = document.createElement('div');
+    name.className = 'food-name';
+    name.textContent = food.name;
+    const macro = document.createElement('div');
+    macro.className = 'food-macro';
+    macro.textContent = `${food.kcal} kcal /${food.per}`;
+    const gramsInput = document.createElement('input');
+    gramsInput.type = 'number';
+    gramsInput.placeholder = 'g';
+    gramsInput.value = '100';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'catalog-btn';
+    addBtn.textContent = '+ Adicionar';
+    addBtn.onclick = async () => {
+      const grams = Number(gramsInput.value);
+      if (!grams || grams <= 0) { flagSave('informe a quantidade'); return; }
+      const mealType = document.getElementById('mealTypeSelect').value;
+      try {
+        await apiPost(`/api/food-log/${todayKey()}`, { foodKey: food.key, grams, mealType });
+        showToast('Adicionado!');
+        await loadFoodLog();
+      } catch (e) { flagSave('erro ao adicionar'); }
+    };
+    row.appendChild(name);
+    row.appendChild(macro);
+    row.appendChild(gramsInput);
+    row.appendChild(addBtn);
+    container.appendChild(row);
+  });
+}
+
+async function saveCustomFood() {
+  const payload = {
+    name: document.getElementById('customFoodName').value,
+    kcal: document.getElementById('customFoodKcal').value,
+    proteinG: document.getElementById('customFoodProtein').value,
+    carbG: document.getElementById('customFoodCarb').value,
+    fatG: document.getElementById('customFoodFat').value,
+  };
+  if (!payload.name.trim()) { flagSave('informe o nome'); return; }
+  try {
+    await apiPost('/api/foods/custom', payload);
+    showToast('Alimento cadastrado! Já dá pra buscar por ele.');
+    ['customFoodName', 'customFoodKcal', 'customFoodProtein', 'customFoodCarb', 'customFoodFat'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+  } catch (e) { flagSave('erro ao cadastrar'); }
+}
+
+async function saveManualTargets() {
+  const payload = {
+    kcal: document.getElementById('targetKcal').value || null,
+    proteinG: document.getElementById('targetProtein').value || null,
+    carbG: document.getElementById('targetCarb').value || null,
+    fatG: document.getElementById('targetFat').value || null,
+  };
+  try {
+    const targets = await apiPut('/api/nutrition/targets', payload);
+    showToast('Meta salva');
+    renderNutritionState({ ...targets, source: 'manual' });
+    document.getElementById('targetSourceHint').textContent = 'Meta definida manualmente.';
+  } catch (e) { flagSave('erro ao salvar meta'); }
+}
+
+async function resetToAutoTargets() {
+  try {
+    await apiPut('/api/nutrition/targets', { kcal: null });
+    await loadNutritionTargets();
+    showToast('Voltou pro cálculo automático');
+  } catch (e) { flagSave('erro'); }
+}
+
+function bindNutritionEvents() {
+  bindFoodSearch();
+  document.getElementById('customFoodSaveBtn').onclick = saveCustomFood;
+  document.getElementById('targetSaveBtn').onclick = saveManualTargets;
+  document.getElementById('targetAutoBtn').onclick = resetToAutoTargets;
+}
+
 // ---------- Modal de referência ----------
 const POSE_ART = {
   hinge: `<svg viewBox="0 0 120 140" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><circle cx="46" cy="20" r="9"/><line x1="46" y1="29" x2="72" y2="65"/><line x1="72" y1="65" x2="76" y2="120"/><line x1="72" y1="65" x2="52" y2="118"/><line x1="50" y1="40" x2="30" y2="95"/><line x1="30" y1="95" x2="88" y2="95"/><rect x="20" y="88" width="10" height="14"/><rect x="88" y="88" width="10" height="14"/></svg>`,
@@ -1480,10 +1708,12 @@ function bindStaticEvents() {
       document.getElementById('exercicios-view').hidden = btn.dataset.tab !== 'exercicios';
       document.getElementById('historico-view').hidden = btn.dataset.tab !== 'historico';
       document.getElementById('perfil-view').hidden = btn.dataset.tab !== 'perfil';
+      document.getElementById('alimentacao-view').hidden = btn.dataset.tab !== 'alimentacao';
       if (btn.dataset.tab === 'historico') { loadSummary().then(renderCalendar); renderHistory(); }
       if (btn.dataset.tab === 'exercicios') { renderCatalog(); renderMyExLists(); }
       if (btn.dataset.tab === 'hoje') { loadDay(currentDateKey); loadSessionState(); }
       if (btn.dataset.tab === 'perfil') { loadProfileTab(); }
+      if (btn.dataset.tab === 'alimentacao') { loadNutritionTab(); }
     };
   });
 
@@ -1492,6 +1722,7 @@ function bindStaticEvents() {
   });
   bindSimplificado();
   bindProfileEvents();
+  bindNutritionEvents();
 
   document.getElementById('catalogSearch').oninput = renderCatalog;
   document.getElementById('catalogMuscleFilter').onchange = renderCatalog;

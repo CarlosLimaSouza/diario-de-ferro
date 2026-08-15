@@ -125,6 +125,7 @@
     <button class="tab-btn" data-tab="exercicios">Meus Exercícios</button>
     <button class="tab-btn" data-tab="historico">Histórico</button>
     <button class="tab-btn" data-tab="perfil">Perfil</button>
+    <button class="tab-btn" data-tab="alimentacao">Alimentação</button>
   </nav>
 
   <section id="hoje-view">
@@ -407,6 +408,64 @@
     </div>
 
     <div class="progress-gallery" id="progressGallery"></div>
+
+  </section>
+
+  <section id="alimentacao-view" hidden>
+
+    <div class="nutrition-summary" id="nutritionSummary"></div>
+
+    <div class="profile-section-title">Meta diária</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div><label for="targetKcal">Calorias</label><input type="number" id="targetKcal"></div>
+        <div><label for="targetProtein">Proteína (g)</label><input type="number" id="targetProtein"></div>
+        <div><label for="targetCarb">Carbo (g)</label><input type="number" id="targetCarb"></div>
+      </div>
+      <div class="quiz-field profile-field-row">
+        <div><label for="targetFat">Gordura (g)</label><input type="number" id="targetFat"></div>
+      </div>
+      <div class="chip-row">
+        <button type="button" class="catalog-btn" id="targetSaveBtn">Salvar meta manual</button>
+        <button type="button" class="catalog-btn-ghost" id="targetAutoBtn">Usar cálculo automático</button>
+      </div>
+      <div class="quiz-hint" id="targetSourceHint" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="profile-section-title">Adicionar alimento</div>
+    <div class="quiz-panel">
+      <div class="quiz-field">
+        <label for="mealTypeSelect">Refeição</label>
+        <select id="mealTypeSelect">
+          <option value="cafe">Café da manhã</option>
+          <option value="almoco">Almoço</option>
+          <option value="lanche">Lanche</option>
+          <option value="jantar">Jantar</option>
+        </select>
+      </div>
+      <div class="quiz-field">
+        <label for="foodSearchInput">Buscar alimento</label>
+        <input type="text" id="foodSearchInput" placeholder="ex: arroz, frango, banana…">
+      </div>
+      <div id="foodSearchResults" class="food-search-results"></div>
+    </div>
+
+    <div class="profile-section-title">Meu alimento (não achou na busca?)</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div><label for="customFoodName">Nome</label><input type="text" id="customFoodName"></div>
+        <div><label for="customFoodKcal">Kcal /100g</label><input type="number" id="customFoodKcal"></div>
+        <div><label for="customFoodProtein">Proteína /100g</label><input type="number" id="customFoodProtein"></div>
+      </div>
+      <div class="quiz-field profile-field-row">
+        <div><label for="customFoodCarb">Carbo /100g</label><input type="number" id="customFoodCarb"></div>
+        <div><label for="customFoodFat">Gordura /100g</label><input type="number" id="customFoodFat"></div>
+      </div>
+      <button type="button" class="catalog-btn" id="customFoodSaveBtn">Cadastrar alimento</button>
+    </div>
+
+    <div class="profile-section-title">Hoje</div>
+    <div id="foodLogList"></div>
 
   </section>
 

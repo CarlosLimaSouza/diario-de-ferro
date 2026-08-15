@@ -624,6 +624,56 @@ section[hidden]{display:none;}
   font-size:13px;line-height:1;cursor:pointer;
 }
 
+/* Alimentação */
+.nutrition-summary{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;margin-bottom:20px;
+}
+.nutrition-kcal-row{
+  display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;
+}
+.nutrition-kcal-num{font-family:'Oswald',sans-serif;font-size:30px;font-weight:700;color:var(--brass);}
+.nutrition-kcal-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);text-transform:uppercase;}
+.nutrition-bar-track{
+  height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-bottom:14px;
+}
+.nutrition-bar-fill{height:100%;background:var(--brass);border-radius:4px;}
+.nutrition-macros{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.nutrition-macro{text-align:center;}
+.nutrition-macro-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;}
+.nutrition-macro-value{font-family:'Oswald',sans-serif;font-size:16px;color:var(--text);}
+.nutrition-macro-bar{height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin-top:4px;}
+.nutrition-macro-bar-fill{height:100%;border-radius:3px;}
+.nutrition-macro-bar-fill.protein{background:var(--grp1);}
+.nutrition-macro-bar-fill.carb{background:var(--grp2);}
+.nutrition-macro-bar-fill.fat{background:var(--grp3);}
+
+.food-search-results{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
+.food-search-item{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:8px 10px;
+}
+.food-search-item .food-name{flex:1;font-family:'Inter',sans-serif;font-size:13px;min-width:120px;}
+.food-search-item .food-macro{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);}
+.food-search-item input[type="number"]{
+  width:64px;background:var(--surface);border:1px solid var(--border);color:var(--text);
+  font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 6px;border-radius:var(--radius);
+}
+
+.meal-group{margin-bottom:14px;}
+.meal-group-title{
+  font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+  color:var(--text-dim);margin-bottom:6px;
+}
+.meal-item{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:8px 12px;margin-bottom:6px;font-size:13px;
+}
+.meal-item .food-name{flex:1;}
+.meal-item .food-macro{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);}
+
 .modal-meta{
   font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);
   text-transform:uppercase;letter-spacing:0.04em;margin-top:-6px;
