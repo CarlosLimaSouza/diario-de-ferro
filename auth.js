@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db, persist } = require('./db');
+const mail = require('./mail');
+
+const RESET_TTL_MS = 60 * 60 * 1000; // 1 hora
 
 const COOKIE_NAME = 'td_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
@@ -117,4 +120,90 @@ function me(req, res) {
   res.json(publicUser(req.user));
 }
 
-module.exports = { signup, login, logout, requireAuth, me };
+// ---------- Recuperação de senha (por e-mail) ----------
+async function forgotPassword(req, res) {
+  const { email } = req.body || {};
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'e-mail inválido' });
+
+  if (!mail.isConfigured()) {
+    return res.status(503).json({ error: 'recuperação por e-mail não está configurada neste servidor ainda' });
+  }
+
+  const user = findUserByEmail(email);
+  // Resposta igual exista ou não a conta — evita confirmar pra quem tenta
+  // adivinhar e-mails cadastrados.
+  if (!user) return res.json({ ok: true });
+
+  const token = crypto.randomBytes(32).toString('hex');
+  db.passwordResets[token] = { userId: user.id, expiresAt: Date.now() + RESET_TTL_MS };
+  await persist();
+
+  const origin = `${req.protocol}://${req.get('host')}`;
+  const resetUrl = `${origin}/?resetToken=${token}`;
+
+  try {
+    await mail.sendMail({
+      to: user.email,
+      subject: 'Redefinir senha — Diário de Ferro',
+      text:
+        `Alguém (esperamos que você) pediu pra redefinir a senha da sua conta no Diário de Ferro.\n\n` +
+        `Clique no link abaixo pra escolher uma nova senha — ele vale por 1 hora:\n${resetUrl}\n\n` +
+        `Se não foi você, pode ignorar este e-mail; sua senha continua a mesma.`,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'não consegui enviar o e-mail agora, tenta de novo mais tarde' });
+  }
+
+  res.json({ ok: true });
+}
+
+async function resetPassword(req, res) {
+  const { token, newPassword } = req.body || {};
+  const entry = token && db.passwordResets[token];
+  if (!entry || entry.expiresAt < Date.now()) {
+    if (entry) delete db.passwordResets[token];
+    return res.status(400).json({ error: 'link inválido ou expirado — peça a recuperação de novo' });
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ error: 'a nova senha precisa ter pelo menos 6 caracteres' });
+  }
+
+  const user = db.users[entry.userId];
+  if (!user) return res.status(400).json({ error: 'conta não encontrada' });
+
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  delete db.passwordResets[token];
+
+  const sessionToken = crypto.randomUUID();
+  db.sessions[sessionToken] = { userId: user.id, expiresAt: Date.now() + SESSION_TTL_MS };
+  await persist();
+
+  setSessionCookie(req, res, sessionToken);
+  res.json(publicUser(user));
+}
+
+// ---------- Trocar senha (usuário já logado) ----------
+async function changePassword(req, res) {
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ error: 'a nova senha precisa ter pelo menos 6 caracteres' });
+  }
+  const ok = await bcrypt.compare(currentPassword || '', req.user.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'senha atual incorreta' });
+
+  req.user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await persist();
+  res.json({ ok: true });
+}
+
+module.exports = {
+  signup,
+  login,
+  logout,
+  requireAuth,
+  me,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  mailConfigured: mail.isConfigured,
+};

@@ -37,24 +37,49 @@ function unsubscribe(req, res) {
 }
 
 // Envia uma notificação pra todos os dispositivos inscritos do usuário.
-// Remove do banco qualquer subscription que o navegador já invalidou.
+// Remove do banco qualquer subscription que o navegador/serviço de push já
+// invalidou (4xx = subscription ruim; erros 5xx/rede ficam, podem ser
+// transitórios). Loga no console pra dar pra ver a causa real nos logs do
+// Railway em vez de falhar em silêncio.
 async function sendPushToUser(userId, payload) {
   const userData = getUserData(userId);
-  if (!userData.pushSubscriptions.length) return;
+  const result = { sent: 0, failed: 0, errors: [] };
+  if (!userData.pushSubscriptions.length) {
+    result.errors.push('nenhuma inscrição de push cadastrada pra esse usuário');
+    return result;
+  }
   const stillValid = [];
   for (const sub of userData.pushSubscriptions) {
     try {
       await webpush.sendNotification(sub, JSON.stringify(payload));
       stillValid.push(sub);
+      result.sent++;
     } catch (err) {
-      if (err.statusCode !== 404 && err.statusCode !== 410) stillValid.push(sub);
-      // 404/410 = subscription expirada/revogada no navegador — descarta.
+      result.failed++;
+      const info = `status ${err.statusCode || '?'}: ${err.body || err.message}`;
+      result.errors.push(info);
+      console.error('[push] falha ao enviar notificação:', info);
+      if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
+        // subscription inválida (expirada, revogada, ou dessincronizada da
+        // chave VAPID atual do servidor) — descarta, não adianta reter.
+        continue;
+      }
+      stillValid.push(sub);
     }
   }
   if (stillValid.length !== userData.pushSubscriptions.length) {
     userData.pushSubscriptions = stillValid;
     persist();
   }
+  return result;
 }
 
-module.exports = { getPublicKey, subscribe, unsubscribe, sendPushToUser, VAPID_PUBLIC_KEY };
+async function sendTest(req, res) {
+  const result = await sendPushToUser(req.userId, {
+    title: 'Teste do Diário de Ferro 🔔',
+    body: 'Se você está vendo isso, as notificações estão funcionando!',
+  });
+  res.json(result);
+}
+
+module.exports = { getPublicKey, subscribe, unsubscribe, sendPushToUser, sendTest, VAPID_PUBLIC_KEY };

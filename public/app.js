@@ -151,6 +151,7 @@ async function checkAuth() {
 function showAuth() {
   document.getElementById('authView').hidden = false;
   document.getElementById('appRoot').hidden = true;
+  checkResetTokenInUrl();
 }
 
 function showApp() {
@@ -159,14 +160,21 @@ function showApp() {
   document.getElementById('userGreeting').textContent = currentUser ? `Olá, ${currentUser.name}` : '';
 }
 
+function showAuthForm(which) {
+  document.getElementById('loginForm').hidden = which !== 'login';
+  document.getElementById('signupForm').hidden = which !== 'signup';
+  document.getElementById('forgotPasswordForm').hidden = which !== 'forgot';
+  document.getElementById('resetPasswordForm').hidden = which !== 'reset';
+  document.querySelector('.auth-tabs').hidden = which === 'reset';
+  document.getElementById('authError').textContent = '';
+}
+
 function bindAuthEvents() {
   document.querySelectorAll('.auth-tab-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      document.getElementById('loginForm').hidden = btn.dataset.authtab !== 'login';
-      document.getElementById('signupForm').hidden = btn.dataset.authtab !== 'signup';
-      document.getElementById('authError').textContent = '';
+      showAuthForm(btn.dataset.authtab);
     };
   });
 
@@ -186,6 +194,55 @@ function bindAuthEvents() {
       password: document.getElementById('signupPassword').value,
     });
   };
+
+  document.getElementById('showForgotBtn').onclick = () => showAuthForm('forgot');
+  document.getElementById('backToLoginBtn').onclick = () => showAuthForm('login');
+
+  document.getElementById('forgotPasswordForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('authError');
+    errEl.textContent = '';
+    try {
+      const r = await fetch('/api/auth/forgot-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('forgotEmail').value }),
+      });
+      const data = await r.json();
+      if (!r.ok) { errEl.textContent = data.error || 'Algo deu errado'; return; }
+      errEl.style.color = 'var(--light)';
+      errEl.textContent = 'Se esse e-mail existir, o link de recuperação já foi enviado.';
+    } catch (e2) {
+      errEl.textContent = 'Erro de conexão. Tente novamente.';
+    }
+  };
+
+  document.getElementById('resetPasswordForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('authError');
+    errEl.textContent = '';
+    const token = new URLSearchParams(location.search).get('resetToken');
+    try {
+      const r = await fetch('/api/auth/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: document.getElementById('resetNewPassword').value }),
+      });
+      const data = await r.json();
+      if (!r.ok) { errEl.textContent = data.error || 'Algo deu errado'; return; }
+      currentUser = data;
+      history.replaceState(null, '', location.pathname);
+      showApp();
+      await bootApp();
+    } catch (e2) {
+      errEl.textContent = 'Erro de conexão. Tente novamente.';
+    }
+  };
+}
+
+// Se o link do e-mail de recuperação trouxe ?resetToken=..., mostra
+// direto o formulário de nova senha em vez da tela normal de login.
+function checkResetTokenInUrl() {
+  const token = new URLSearchParams(location.search).get('resetToken');
+  if (token) showAuthForm('reset');
 }
 
 async function submitAuth(url, body) {
@@ -366,9 +423,15 @@ function renderExercises() {
     info.className = 'info-icon';
     info.textContent = 'i';
     info.onclick = () => openExerciseModal(ex);
+    const substituteBtn = document.createElement('div');
+    substituteBtn.className = 'info-icon substitute-icon';
+    substituteBtn.textContent = '⇄';
+    substituteBtn.title = 'Substituir por similar';
+    substituteBtn.onclick = () => substituteExercise(ex.key);
     const nameCol = document.createElement('div');
     nameCol.innerHTML = `<div class="ex-name">${ex.name}</div>${ex.note ? `<div class="ex-note">${ex.note}</div>` : ''}`;
     nameWrap.appendChild(info);
+    nameWrap.appendChild(substituteBtn);
     nameWrap.appendChild(nameCol);
     head.appendChild(nameWrap);
 
@@ -487,6 +550,16 @@ function computeValueDetail(ex, data) {
     return { value: isNaN(min) ? null : min, detail: data.level ? `nível ${data.level}` : '' };
   }
   return { value: null, detail: '' };
+}
+
+async function substituteExercise(key) {
+  if (!confirm('Substituir esse exercício por um similar automaticamente? Isso troca no seu plano, não só por hoje.')) return;
+  try {
+    const res = await apiPost(`/api/my-exercises/${key}/substitute`, {});
+    showToast(`Trocado por: ${res.exercise.name}`);
+    await loadMyExercises();
+    await loadDay(currentDay.date);
+  } catch (e) { flagSave('nenhum substituto disponível'); }
 }
 
 async function saveExercise(ex, data) {
@@ -688,6 +761,21 @@ async function togglePush() {
     return;
   }
   refreshPushButton();
+}
+
+async function sendTestPush() {
+  const resultEl = document.getElementById('pushTestResult');
+  resultEl.textContent = 'Enviando...';
+  try {
+    const r = await apiPost('/api/push/test', {});
+    if (r.sent > 0) {
+      resultEl.textContent = `Enviado (${r.sent} dispositivo${r.sent > 1 ? 's' : ''}). Se não chegou em alguns segundos, o problema é na entrega do navegador/SO, não no app.`;
+    } else {
+      resultEl.textContent = `Não enviou: ${r.errors.join('; ') || 'nenhuma inscrição ativa — clique em "Ativar notificações push" primeiro.'}`;
+    }
+  } catch (e) {
+    resultEl.textContent = 'Erro ao chamar o teste.';
+  }
 }
 
 // ---------- Calendário ----------
@@ -1259,6 +1347,28 @@ async function saveProfileTab() {
   } catch (e) { flagSave('erro ao salvar'); }
 }
 
+async function changeAccountPassword() {
+  const resultEl = document.getElementById('pwChangeResult');
+  const currentPassword = document.getElementById('pwCurrent').value;
+  const newPassword = document.getElementById('pwNew').value;
+  resultEl.style.color = '';
+  resultEl.textContent = '';
+  try {
+    const r = await fetch('/api/auth/password', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await r.json();
+    if (!r.ok) { resultEl.textContent = data.error || 'erro ao trocar senha'; return; }
+    resultEl.style.color = 'var(--light)';
+    resultEl.textContent = 'Senha alterada!';
+    document.getElementById('pwCurrent').value = '';
+    document.getElementById('pwNew').value = '';
+  } catch (e) {
+    resultEl.textContent = 'Erro de conexão.';
+  }
+}
+
 async function uploadFile(url, file, extraFields) {
   const form = new FormData();
   form.append('photo', file);
@@ -1534,7 +1644,9 @@ function bindProfileEvents() {
   document.getElementById('profileSaveBtn').onclick = saveProfileTab;
   document.getElementById('metricSaveBtn').onclick = saveBodyMetric;
   document.getElementById('pushToggleBtn').onclick = togglePush;
+  document.getElementById('pushTestBtn').onclick = sendTestPush;
   document.getElementById('reminderAddBtn').onclick = addReminder;
+  document.getElementById('pwChangeBtn').onclick = changeAccountPassword;
   buildReminderDaysGrid();
   bindProfilePhotoInput();
   bindProgressPhotoInput();

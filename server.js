@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { db, persist, getUserData, resetUserData } = require('./db');
 const { CATALOG, EQUIPMENT_KEYS } = require('./catalog');
-const { signup, login, logout, requireAuth, me } = require('./auth');
+const { signup, login, logout, requireAuth, me, forgotPassword, resetPassword, changePassword } = require('./auth');
 const { generatePlan } = require('./plan');
 const photos = require('./photos');
 const push = require('./push');
@@ -12,6 +12,7 @@ const session = require('./session');
 const nutrition = require('./nutrition');
 const gamification = require('./gamification');
 const reminders = require('./reminders');
+const { findSubstitute } = require('./substitute');
 
 const GOALS = ['emagrecimento', 'hipertrofia', 'forca', 'condicionamento', 'saude_geral'];
 const LEVELS = ['iniciante', 'intermediario', 'avancado'];
@@ -51,6 +52,9 @@ app.post('/api/auth/signup', signup);
 app.post('/api/auth/login', login);
 app.post('/api/auth/logout', logout);
 app.get('/api/auth/me', requireAuth, me);
+app.post('/api/auth/forgot-password', forgotPassword);
+app.post('/api/auth/reset-password', resetPassword);
+app.put('/api/auth/password', requireAuth, changePassword);
 
 // ---------- Catálogo ----------
 app.get('/api/catalog', requireAuth, (req, res) => {
@@ -246,6 +250,21 @@ app.delete('/api/my-exercises/:key', requireAuth, (req, res) => {
   persist().then(() => res.json({ ok: true, myExercises: myExercisesGrouped(userData) }));
 });
 
+// Troca um exercício do plano por outro do mesmo grupo muscular, pontuado
+// por tipo de execução/equipamento disponível/objetivo (substitute.js).
+// Preserva a categoria (pesado/leve/etc) — só troca a chave do exercício.
+app.post('/api/my-exercises/:key/substitute', requireAuth, (req, res) => {
+  const userData = getUserData(req.userId);
+  const entry = userData.myExercises.find((m) => m.key === req.params.key);
+  if (!entry) return res.status(404).json({ error: 'exercício não está no seu plano' });
+
+  const substitute = findSubstitute(req.params.key, userData);
+  if (!substitute) return res.status(404).json({ error: 'nenhum substituto disponível pra esse grupo muscular' });
+
+  entry.key = substitute.key;
+  persist().then(() => res.json({ ok: true, exercise: substitute, myExercises: myExercisesGrouped(userData) }));
+});
+
 // ---------- Dia ----------
 // O treino "de hoje" não é mais calculado por rotação de data: é sempre o
 // grupo pendente na fila (scheduleState.pendingIndex). A fila só anda quando
@@ -410,6 +429,7 @@ app.post('/api/session/rest', requireAuth, session.rest);
 app.get('/api/push/public-key', push.getPublicKey);
 app.post('/api/push/subscribe', requireAuth, push.subscribe);
 app.post('/api/push/unsubscribe', requireAuth, push.unsubscribe);
+app.post('/api/push/test', requireAuth, push.sendTest);
 
 // ---------- Diário alimentar ----------
 app.get('/api/foods/search', requireAuth, nutrition.searchFoods);

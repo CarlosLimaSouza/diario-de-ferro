@@ -253,6 +253,8 @@ section[hidden]{display:none;}
   cursor:pointer;flex-shrink:0;
 }
 .info-icon:hover{border-color:var(--brass);color:var(--brass);}
+.substitute-icon{font-size:13px;}
+.substitute-icon:hover{border-color:var(--grp2);color:var(--grp2);}
 .ex-status{
   font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;
   color:var(--text-faint);
@@ -394,6 +396,14 @@ section[hidden]{display:none;}
 .auth-error{
   min-height:16px;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;
   color:var(--heavy);text-align:center;
+}
+.auth-forgot-link{
+  text-align:center;margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text-faint);text-decoration:underline;cursor:pointer;
+}
+.auth-forgot-link:hover{color:var(--brass);}
+.auth-forgot-lede{
+  font-family:'Inter',sans-serif;font-size:12px;color:var(--text-dim);line-height:1.5;margin:0 0 4px;
 }
 .user-greeting{
   font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:4px;
@@ -550,6 +560,7 @@ section[hidden]{display:none;}
   display:flex;align-items:center;gap:6px;
   font-family:'Inter',sans-serif;font-size:13px;color:var(--text-dim);cursor:pointer;
 }
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;}
 .quiz-hint{
   font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-faint);
   margin-bottom:12px;

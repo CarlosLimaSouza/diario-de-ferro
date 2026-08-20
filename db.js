@@ -16,7 +16,7 @@ function ensureDir() {
 }
 
 function emptyDB() {
-  return { users: {}, sessions: {}, userData: {} };
+  return { users: {}, sessions: {}, userData: {}, passwordResets: {} };
 }
 
 function emptyProfile() {
@@ -61,6 +61,7 @@ function loadDB() {
       users: parsed.users || {},
       sessions: parsed.sessions || {},
       userData: parsed.userData || {},
+      passwordResets: parsed.passwordResets || {},
     };
   } catch (e) {
     console.error('Falha ao ler o banco de dados, iniciando um novo.', e);

@@ -21,6 +21,7 @@
       <input type="email" id="loginEmail" placeholder="E-mail" required autocomplete="email">
       <input type="password" id="loginPassword" placeholder="Senha" required autocomplete="current-password">
       <button type="submit" class="auth-submit">Entrar</button>
+      <div class="auth-forgot-link" id="showForgotBtn">Esqueci minha senha</div>
     </form>
 
     <form id="signupForm" class="auth-form" hidden>
@@ -28,6 +29,19 @@
       <input type="email" id="signupEmail" placeholder="E-mail" required autocomplete="email">
       <input type="password" id="signupPassword" placeholder="Senha (mín. 6 caracteres)" required autocomplete="new-password">
       <button type="submit" class="auth-submit">Criar conta</button>
+    </form>
+
+    <form id="forgotPasswordForm" class="auth-form" hidden>
+      <p class="auth-forgot-lede">Informe o e-mail da sua conta — se ele existir, mandamos um link pra redefinir a senha.</p>
+      <input type="email" id="forgotEmail" placeholder="E-mail" required autocomplete="email">
+      <button type="submit" class="auth-submit">Enviar link de recuperação</button>
+      <div class="auth-forgot-link" id="backToLoginBtn">Voltar pro login</div>
+    </form>
+
+    <form id="resetPasswordForm" class="auth-form" hidden>
+      <p class="auth-forgot-lede">Escolha sua nova senha.</p>
+      <input type="password" id="resetNewPassword" placeholder="Nova senha (mín. 6 caracteres)" required autocomplete="new-password">
+      <button type="submit" class="auth-submit">Redefinir senha e entrar</button>
     </form>
 
     <div class="auth-error" id="authError"></div>
@@ -338,6 +352,16 @@
       <button type="button" class="schedule-save" id="profileSaveBtn">Salvar dados pessoais</button>
     </div>
 
+    <div class="profile-section-title">Conta</div>
+    <div class="quiz-panel">
+      <div class="quiz-field profile-field-row">
+        <div><label for="pwCurrent">Senha atual</label><input type="password" id="pwCurrent" autocomplete="current-password"></div>
+        <div><label for="pwNew">Nova senha</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+      </div>
+      <button type="button" class="catalog-btn" id="pwChangeBtn">Trocar senha</button>
+      <div class="quiz-hint" id="pwChangeResult" style="margin-top:8px;"></div>
+    </div>
+
     <div class="profile-section-title">Nível e conquistas</div>
     <div class="level-card" id="levelCard"></div>
     <div class="achievements-grid" id="achievementsGrid"></div>
@@ -372,7 +396,11 @@
         Avisa quando o descanso entre séries termina — funciona mesmo com o site em
         segundo plano ou fechado, se o navegador suportar.
       </div>
-      <button type="button" class="catalog-btn" id="pushToggleBtn">Ativar notificações push</button>
+      <div class="chip-row">
+        <button type="button" class="catalog-btn" id="pushToggleBtn">Ativar notificações push</button>
+        <button type="button" class="catalog-btn-ghost" id="pushTestBtn">Testar notificação agora</button>
+      </div>
+      <div class="quiz-hint" id="pushTestResult" style="margin-top:8px;"></div>
     </div>
 
     <div class="profile-section-title">Foto de perfil</div>

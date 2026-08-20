@@ -6,6 +6,8 @@ services:
     environment:
       - PORT=3000
       - DB_PATH=/data/db.json
+      - GMAIL_USER=${GMAIL_USER:-}
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD:-}
     volumes:
       - treino-data:/data
 
