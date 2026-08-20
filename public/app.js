@@ -721,6 +721,11 @@ async function refreshPushButton() {
     if (sub) {
       btn.textContent = '✓ Notificações ativadas — toque pra desativar';
       btn.classList.add('on');
+      // O navegador pode ter uma inscrição que o servidor nunca recebeu (ex:
+      // o POST de /subscribe falhou silenciosamente na hora de ativar) —
+      // re-envia sempre que a aba de Perfil carrega. A rota já é idempotente
+      // (só grava se não existir), então isso é seguro de repetir.
+      try { await apiPost('/api/push/subscribe', sub.toJSON()); } catch (e2) { /* tenta de novo na próxima visita */ }
     } else {
       btn.textContent = 'Ativar notificações push';
       btn.classList.remove('on');
@@ -757,6 +762,7 @@ async function togglePush() {
     await apiPost('/api/push/subscribe', sub.toJSON());
     showToast('Notificações ativadas!');
   } catch (e) {
+    console.error('[push] falha ao ativar:', e);
     flagSave('erro ao ativar notificações');
     return;
   }

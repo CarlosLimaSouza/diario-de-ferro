@@ -21,6 +21,10 @@ const CATALOG = [
     description: 'Sentado, junte os braços à frente do peito num movimento de arco, controlando a volta até sentir alongamento.' },
   { key: 'cross_over', name: 'Crossover no cabo', muscleGroup: 'peito', equipment: 'cabo', type: 'weight', sets: 3, pose: 'fly',
     description: 'Em pé entre as polias altas, puxe os cabos num arco à frente do corpo até se cruzarem, contraindo o peito no final do movimento.' },
+  { key: 'supino_cabo', name: 'Supino no cabo', muscleGroup: 'peito', equipment: 'cabo', type: 'weight', sets: 4, pose: 'press',
+    description: 'Com a polia ajustada na altura do peito, empurre os punhadores à frente até quase estender os cotovelos e controle a volta. Boa alternativa de supino em estações que só têm cabo/polia, sem barra ou halteres.' },
+  { key: 'crucifixo_cabo_peck', name: 'Crucifixo no cabo (peck deck)', muscleGroup: 'peito', equipment: 'cabo', type: 'weight', sets: 3, pose: 'fly',
+    description: 'Com os cabos na altura do peito e leve flexão de cotovelo, junte os punhadores à frente do corpo em arco, contraindo o peito, e controle a volta até sentir o alongamento.' },
   { key: 'flexao_bracos', name: 'Flexão de braços (push-up)', muscleGroup: 'peito', equipment: 'peso_corporal', type: 'weight', sets: 3, note: 'reps até a falha', pose: 'press',
     description: 'Corpo reto da cabeça aos calcanhares, desça o peito próximo ao chão flexionando os cotovelos e empurre de volta à posição inicial.' },
 
@@ -41,6 +45,8 @@ const CATALOG = [
     description: 'Sentado com as coxas presas, puxe a barra até a parte superior do peito, levando os cotovelos para baixo e para trás.' },
   { key: 'puxada_supinada', name: 'Puxada supinada (pegada inversa)', muscleGroup: 'costas', equipment: 'maquina', type: 'weight', sets: 3, pose: 'pulldown',
     description: 'Igual à puxada alta, mas com as palmas voltadas para você — dá mais ênfase ao bíceps junto com as costas.' },
+  { key: 'puxada_cabo_em_pe', name: 'Puxada no cabo, em pé', muscleGroup: 'costas', equipment: 'cabo', type: 'weight', sets: 4, pose: 'pulldown',
+    description: 'Com a polia alta, puxe o punhador ou a barra reta pra baixo até a altura do peito, mantendo o tronco firme e levando os cotovelos pra baixo e pra trás — a versão pra estações de cabo que não têm banco com apoio de coxa.' },
   { key: 'barra_fixa', name: 'Barra fixa (pull-up)', muscleGroup: 'costas', equipment: 'peso_corporal', type: 'weight', sets: 3, note: 'reps até a falha', pose: 'pulldown',
     description: 'Pendurado na barra com pegada pronada, puxe o corpo até o queixo passar da barra e desça controlando o movimento.' },
   { key: 'hiperextensao', name: 'Hiperextensão de lombar', muscleGroup: 'costas', equipment: 'maquina', type: 'weight', sets: 3, pose: 'hinge',
@@ -99,6 +105,12 @@ const CATALOG = [
     description: 'Tronco inclinado à frente, abra os braços lateralmente contraindo a parte de trás dos ombros e as costas superiores.' },
   { key: 'encolhimento_ombros', name: 'Encolhimento de ombros (shrug)', muscleGroup: 'ombros', equipment: 'halteres', type: 'weight', sets: 3, pose: 'raise',
     description: 'Com halteres ao lado do corpo, eleve os ombros em direção às orelhas e desça controladamente.' },
+  { key: 'desenvolvimento_cabo', name: 'Desenvolvimento no cabo', muscleGroup: 'ombros', equipment: 'cabo', type: 'weight', sets: 3, pose: 'press',
+    description: 'Com a polia baixa, empurre o punhador de baixo pra cima até quase estender o braço acima da cabeça, controlando a descida.' },
+  { key: 'encolhimento_cabo', name: 'Encolhimento no cabo (trapézio)', muscleGroup: 'ombros', equipment: 'cabo', type: 'weight', sets: 3, pose: 'raise',
+    description: 'Segurando a barra reta na polia baixa, eleve os ombros em direção às orelhas sem flexionar os cotovelos, e desça controlando.' },
+  { key: 'remada_alta_cabo', name: 'Remada alta no cabo', muscleGroup: 'ombros', equipment: 'cabo', type: 'weight', sets: 3, pose: 'row',
+    description: 'Com a barra reta na polia baixa, puxe o peso próximo ao corpo até a altura do peito, levando os cotovelos pra cima e pra fora.' },
 
   // ---------- Bíceps ----------
   { key: 'rosca_direta_barra', name: 'Rosca direta com barra', muscleGroup: 'biceps', equipment: 'barra', type: 'weight', sets: 3, pose: 'curl',

@@ -151,6 +151,7 @@ async function forgotPassword(req, res) {
         `Se não foi você, pode ignorar este e-mail; sua senha continua a mesma.`,
     });
   } catch (e) {
+    console.error('[mail] falha ao enviar e-mail de recuperação:', e && e.code, e && e.message, e);
     return res.status(500).json({ error: 'não consegui enviar o e-mail agora, tenta de novo mais tarde' });
   }
 
